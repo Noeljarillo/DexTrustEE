@@ -1,40 +1,150 @@
 'use client';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { 
-  WagmiProvider, 
-  createConfig, 
-  http, 
-  type Config
-} from 'wagmi';
-import { mainnet, sepolia } from 'wagmi/chains';
-import { injected, walletConnect } from 'wagmi/connectors';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ethers } from 'ethers';
 
-// Create a query client for React Query
-const queryClient = new QueryClient();
+// Add Ethereum provider types
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: any[] }) => Promise<any>;
+      on: (event: string, callback: (...args: any[]) => void) => void;
+      removeListener: (event: string, callback: (...args: any[]) => void) => void;
+    };
+  }
+}
 
-// Configure Wagmi
-const config: Config = createConfig({
-  chains: [mainnet, sepolia],
-  transports: {
-    [mainnet.id]: http(),
-    [sepolia.id]: http(),
-  },
-  connectors: [
-    injected(),
-    walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'YOUR_PROJECT_ID', // You'll need to obtain this from WalletConnect
-    }),
-  ],
+type WalletContextType = {
+  address: string | null;
+  isConnected: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+  chainId: number | null;
+};
+
+const WalletContext = createContext<WalletContextType>({
+  address: null,
+  isConnected: false,
+  connectWallet: async () => {},
+  disconnectWallet: () => {},
+  chainId: null,
 });
 
-// Provider component that wraps the children with necessary providers
-export function WalletProvider({ children }: { children: React.ReactNode }) {
+export const useWallet = () => useContext(WalletContext);
+
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const [address, setAddress] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<number | null>(null);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
+
+  // Connect wallet
+  const connectWallet = async () => {
+    if (typeof window.ethereum === 'undefined') {
+      alert('Please install MetaMask to use this application');
+      return;
+    }
+
+    try {
+      // Request account access
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const network = await provider.getNetwork();
+      
+      setAddress(accounts[0]);
+      setChainId(Number(network.chainId));
+      setIsConnected(true);
+      
+      // Save connection state to localStorage
+      localStorage.setItem('walletConnected', 'true');
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+    }
+  };
+
+  // Disconnect wallet
+  const disconnectWallet = () => {
+    setAddress(null);
+    setChainId(null);
+    setIsConnected(false);
+    localStorage.removeItem('walletConnected');
+  };
+
+  // Check if wallet was previously connected
+  useEffect(() => {
+    const checkConnection = async () => {
+      const wasConnected = localStorage.getItem('walletConnected') === 'true';
+      
+      if (wasConnected && typeof window.ethereum !== 'undefined') {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const network = await provider.getNetwork();
+            
+            setAddress(accounts[0]);
+            setChainId(Number(network.chainId));
+            setIsConnected(true);
+          } else {
+            // If no accounts returned, clear the connection state
+            localStorage.removeItem('walletConnected');
+          }
+        } catch (error) {
+          console.error('Error checking wallet connection:', error);
+          localStorage.removeItem('walletConnected');
+        }
+      }
+    };
+
+    checkConnection();
+  }, []);
+
+  // Handle account and chain changes
+  useEffect(() => {
+    if (typeof window.ethereum === 'undefined') return;
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      if (accounts.length === 0) {
+        // User disconnected their wallet
+        disconnectWallet();
+      } else if (isConnected) {
+        // User switched accounts
+        setAddress(accounts[0]);
+      }
+    };
+
+    const handleChainChanged = (chainIdHex: string) => {
+      if (isConnected) {
+        setChainId(parseInt(chainIdHex, 16));
+      }
+    };
+
+    // Add null check before adding event listeners
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      window.ethereum.on('chainChanged', handleChainChanged);
+      
+      return () => {
+        if (window.ethereum) {
+          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+          window.ethereum.removeListener('chainChanged', handleChainChanged);
+        }
+      };
+    }
+    
+    return undefined;
+  }, [isConnected]);
+
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </WagmiProvider>
+    <WalletContext.Provider
+      value={{
+        address,
+        isConnected,
+        connectWallet,
+        disconnectWallet,
+        chainId,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
   );
 } 

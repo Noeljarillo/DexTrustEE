@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useWallet } from '../providers/WalletProvider';
 
 export function OrderForm() {
-  const { isConnected } = useAccount();
+  const { isConnected } = useWallet();
   const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
