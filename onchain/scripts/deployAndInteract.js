@@ -1,5 +1,7 @@
 // Script to deploy OrderHandler and TestToken contracts and interact with them
 const hre = require("hardhat");
+const fs = require('fs');
+const path = require('path');
 
 async function main() {
   console.log("Deploying the TestToken and OrderHandler contracts to Sepolia...");
@@ -23,6 +25,29 @@ async function main() {
   await orderHandler.waitForDeployment();
   const handlerAddress = await orderHandler.getAddress();
   console.log(`OrderHandler deployed to: ${handlerAddress}`);
+
+  // Save deployment information to a file
+  const deploymentData = {
+    network: hre.network.name,
+    deployer: deployer.address,
+    testToken: tokenAddress,
+    orderHandler: handlerAddress,
+    deploymentTime: new Date().toISOString()
+  };
+
+  // Create deployments directory if it doesn't exist
+  const deploymentsDir = path.join(__dirname, '../deployments');
+  if (!fs.existsSync(deploymentsDir)){
+    fs.mkdirSync(deploymentsDir, { recursive: true });
+  }
+
+  // Write deployment information to a JSON file
+  const deploymentPath = path.join(deploymentsDir, `${hre.network.name}.json`);
+  fs.writeFileSync(
+    deploymentPath,
+    JSON.stringify(deploymentData, null, 2)
+  );
+  console.log(`Deployment information saved to ${deploymentPath}`);
 
   console.log("Deployment complete! Contract addresses:");
   console.log(`- TestToken: ${tokenAddress}`);

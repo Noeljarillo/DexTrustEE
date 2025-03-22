@@ -1,0 +1,7 @@
+{
+  "network": "sepolia",
+  "deployer": "0x790d325cC1f319620aDdd1be1B78924AB1D18311",
+  "testToken": "0x77f369477A0140b30D359741F8720EE23f03eBD7",
+  "orderHandler": "0x6e70b715531BC3aAbD5F26762973d8A1070c5bFD",
+  "deploymentTime": "2025-03-22T18:24:37.264Z"
+}
