@@ -2,12 +2,12 @@
 const hre = require("hardhat");
 
 async function main() {
-  console.log("Deploying the TestToken and OrderHandler contracts...");
+  console.log("Deploying the TestToken and OrderHandler contracts to Sepolia...");
 
   // Get signers
-  const [deployer, user] = await hre.ethers.getSigners();
+  const [deployer] = await hre.ethers.getSigners();
   console.log(`Deployer address: ${deployer.address}`);
-  console.log(`User address: ${user.address}`);
+  console.log(`Network: ${hre.network.name}`);
 
   // Deploy TestToken with initial supply
   const initialSupply = hre.ethers.parseEther("1000000");
@@ -18,58 +18,18 @@ async function main() {
   console.log(`TestToken deployed to: ${tokenAddress}`);
 
   // Deploy OrderHandler contract
-  const OrderHandler = await hre.ethers.getContractFactory("contracts/OrderHandler.sol:OrderHandler");
+  const OrderHandler = await hre.ethers.getContractFactory("OrderHandler");
   const orderHandler = await OrderHandler.deploy();
   await orderHandler.waitForDeployment();
   const handlerAddress = await orderHandler.getAddress();
   console.log(`OrderHandler deployed to: ${handlerAddress}`);
 
-  // Transfer some tokens to the user
-  const transferAmount = hre.ethers.parseEther("10000");
-  await testToken.transfer(user.address, transferAmount);
-  console.log(`Transferred ${hre.ethers.formatEther(transferAmount)} tokens to ${user.address}`);
-  console.log(`User token balance: ${hre.ethers.formatEther(await testToken.balanceOf(user.address))}`);
-
-  // Place an order with the tokens
-  const depositAmount = hre.ethers.parseEther("5000");
-  
-  // First approve the OrderHandler to transfer tokens
-  await testToken.connect(user).approve(handlerAddress, depositAmount);
-  console.log(`Approved OrderHandler to spend ${hre.ethers.formatEther(depositAmount)} tokens from user`);
-  
-  // Place the token order
-  const orderType = 1; // Example order type
-  const size = 10;     // Example size
-  const side = "buy";  // Example side
-  const marketCode = "ETH-USD"; // Example market code
-  
-  const placeOrderTx = await orderHandler.connect(user).placeTokenOrder(
-    tokenAddress,
-    depositAmount,
-    orderType,
-    size,
-    side,
-    marketCode
-  );
-  await placeOrderTx.wait();
-  console.log(`Order placed with ${hre.ethers.formatEther(depositAmount)} tokens`);
-  
-  // Check OrderHandler token balance
-  const handlerBalance = await testToken.balanceOf(handlerAddress);
-  console.log(`OrderHandler token balance: ${hre.ethers.formatEther(handlerBalance)}`);
-  
-  // Owner withdraws tokens
-  const withdrawTx = await orderHandler.connect(deployer).withdraw(
-    tokenAddress,
-    deployer.address,
-    handlerBalance
-  );
-  await withdrawTx.wait();
-  console.log(`Owner withdrew ${hre.ethers.formatEther(handlerBalance)} tokens from OrderHandler`);
-  
-  // Verify final balances
-  console.log(`OrderHandler final balance: ${hre.ethers.formatEther(await testToken.balanceOf(handlerAddress))}`);
-  console.log(`Owner final balance: ${hre.ethers.formatEther(await testToken.balanceOf(deployer.address))}`);
+  console.log("Deployment complete! Contract addresses:");
+  console.log(`- TestToken: ${tokenAddress}`);
+  console.log(`- OrderHandler: ${handlerAddress}`);
+  console.log("Verify contracts on Sepolia Etherscan with:");
+  console.log(`npx hardhat verify --network sepolia ${tokenAddress} ${initialSupply}`);
+  console.log(`npx hardhat verify --network sepolia ${handlerAddress}`);
 }
 
 // Execute the script
