@@ -144,16 +144,11 @@ private:
             }
         }
         
+        // Update order status
         if (order.remaining_quantity <= 0) {
             order.status = FILLED;
-        } else if (order.remaining_quantity < order.quantity) {
-            order.status = PARTIALLY_FILLED;
-            if (order.side == BUY) {
-                buy_orders.push(order);
-            } else {
-                sell_orders.push(order);
-            }
         } else {
+            order.status = OPEN;
             if (order.side == BUY) {
                 buy_orders.push(order);
             } else {

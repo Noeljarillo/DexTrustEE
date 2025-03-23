@@ -338,7 +338,10 @@ void handle_http_request(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = (int)recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     
+    printf("[DEBUG] Received HTTP request (%d bytes)\n", bytes_received);
+    
     if (bytes_received <= 0) {
+        printf("[ERROR] Failed to receive data from client\n");
         close(client_socket);
         return;
     }
@@ -349,10 +352,13 @@ void handle_http_request(int client_socket) {
     char query_string[256] = {0};
     
     if (parse_http_request(buffer, method, path, query_string) < 0) {
+        printf("[ERROR] Failed to parse HTTP request\n");
         send_http_response(client_socket, 400, "text/plain", "Bad Request");
         close(client_socket);
         return;
     }
+    
+    printf("[DEBUG] Method: %s, Path: %s, Query: %s\n", method, path, query_string);
     
     // Handle GET request to read trades
     if (strcmp(method, "GET") == 0 && strcmp(path, "/trades") == 0) {
@@ -387,9 +393,11 @@ void handle_http_request(int client_socket) {
             }
         }
     }
-    // Handle POST request to add order
+    // Handle POST request to add an order
     else if (strcmp(method, "POST") == 0 && strcmp(path, "/order") == 0) {
-        // Extract parameters from query string
+        printf("[DEBUG] Processing order request\n");
+        
+        // Extract parameters
         char user_address[64] = {0};
         char type_str[16] = {0};
         char side_str[16] = {0};
@@ -402,15 +410,19 @@ void handle_http_request(int client_socket) {
             get_query_param(query_string, "side", side_str, sizeof(side_str)) < 0 ||
             get_query_param(query_string, "quantity", quantity_str, sizeof(quantity_str)) < 0) {
             
-            send_http_response(client_socket, 400, "text/plain", "Missing required parameters (user, type, side, quantity)");
+            printf("[ERROR] Missing required parameters\n");
+            send_http_response(client_socket, 400, "text/plain", "Missing required parameters");
             close(client_socket);
             return;
         }
         
-        // For market orders, price is optional
+        printf("[DEBUG] Parameters: user=%s, type=%s, side=%s, quantity=%s\n", 
+               user_address, type_str, side_str, quantity_str);
+        
         int order_type = (strcmp(type_str, "market") == 0) ? 1 : 0; // 0=LIMIT, 1=MARKET
         
         if (order_type == 0 && get_query_param(query_string, "price", price_str, sizeof(price_str)) < 0) {
+            printf("[ERROR] Price is required for limit orders\n");
             send_http_response(client_socket, 400, "text/plain", "Price is required for limit orders");
             close(client_socket);
             return;
@@ -421,8 +433,12 @@ void handle_http_request(int client_socket) {
         double price = (order_type == 1) ? 0.0 : atof(price_str);
         double quantity = atof(quantity_str);
         
+        printf("[DEBUG] Processed parameters: type=%d, side=%d, price=%.2f, quantity=%.2f\n", 
+               order_type, order_side, price, quantity);
+        
         // Validate Ethereum address (simple check)
-        if (strlen(user_address) < 10) {
+        if (strlen(user_address) < 40) {
+            printf("[ERROR] Invalid Ethereum address: %s\n", user_address);
             send_http_response(client_socket, 400, "text/plain", "Invalid Ethereum address");
             close(client_socket);
             return;
@@ -430,15 +446,20 @@ void handle_http_request(int client_socket) {
         
         // Add order to the book
         char order_id[64] = {0};
+        printf("[DEBUG] Calling enclave function ecall_add_order\n");
         sgx_status_t status = ecall_add_order(global_eid, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
+        
+        printf("[DEBUG] Enclave call completed with status: %d\n", status);
         
         if (status != SGX_SUCCESS || order_id[0] == '\0') {
             char error_msg[100];
             snprintf(error_msg, sizeof(error_msg), "Error: Failed to add order. Error code: %d", status);
+            printf("[ERROR] %s\n", error_msg);
             send_http_response(client_socket, 500, "text/plain", error_msg);
         } else {
             char response_body[256];
             snprintf(response_body, sizeof(response_body), "{\"order_id\": \"%s\"}", order_id);
+            printf("[DEBUG] Order added successfully: %s\n", order_id);
             send_http_response(client_socket, 200, "application/json", response_body);
         }
     }
@@ -447,6 +468,7 @@ void handle_http_request(int client_socket) {
         send_http_response(client_socket, 404, "text/plain", "Not Found");
     }
     
+    printf("[DEBUG] Closing client socket\n");
     close(client_socket);
 }
 
