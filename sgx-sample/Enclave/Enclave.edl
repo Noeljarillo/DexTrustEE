@@ -54,11 +54,13 @@ enclave {
     trusted {
         
         /* Order book functions */
-        public char* ecall_add_order([in, string] const char* user_address, 
-                                    int order_type, 
-                                    int order_side, 
-                                    double price, 
-                                    double quantity);
+        public void ecall_add_order([in, string] const char* user_address, 
+                                   int order_type, 
+                                   int order_side, 
+                                   double price, 
+                                   double quantity,
+                                   [out, size=id_size] char* order_id,
+                                   size_t id_size);
                                              
         public size_t ecall_get_trades([out, size=json_size] char* trades_json, 
                                       size_t json_size);
