@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWallet } from '../providers/WalletProvider';
 import { placeEthOrder, placeTokenOrder, approveTokens } from '../utils/contractUtils';
-import { ORDER_TYPES, MARKET_CODES, CONTRACT_ADDRESSES } from '../utils/constants';
+import { ORDER_TYPES, MARKET_CODES, CONTRACT_ADDRESSES, getEtherscanTxLink } from '../utils/constants';
 
 type OrderFormProps = {
   selectedMarket?: string;
@@ -486,7 +486,14 @@ export function OrderForm({ selectedMarket = MARKET_CODES.ETH_USDT }: OrderFormP
         
         {txHash && (
           <div className="mb-4 p-2 bg-green-900 bg-opacity-30 border border-green-800 rounded text-green-300 text-sm">
-            Transaction submitted! Hash: {txHash.slice(0, 10)}...{txHash.slice(-6)}
+            Transaction successful! <a 
+              href={getEtherscanTxLink(txHash)} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="underline hover:text-green-200"
+            >
+              View on Sepolia Etherscan
+            </a>
           </div>
         )}
         

@@ -4,19 +4,20 @@ const fs = require('fs');
 const path = require('path');
 
 async function main() {
-  console.log("Testing deposits and withdrawals on Sepolia...");
+  const networkName = hre.network.name;
+  console.log(`Testing deposits and withdrawals on ${networkName}...`);
 
   // Get signers
   const [deployer] = await hre.ethers.getSigners();
   console.log(`Your address: ${deployer.address}`);
-  console.log(`Network: ${hre.network.name}`);
+  console.log(`Network: ${networkName}`);
 
   // Try to get contract addresses from deployment artifacts if available
   let tokenAddress, handlerAddress;
   
   try {
     // Look for deployment artifacts
-    const artifactsPath = path.join(__dirname, '../deployments/sepolia.json');
+    const artifactsPath = path.join(__dirname, `../deployments/${networkName}.json`);
     if (fs.existsSync(artifactsPath)) {
       const artifacts = JSON.parse(fs.readFileSync(artifactsPath, 'utf8'));
       tokenAddress = artifacts.testToken;
@@ -34,7 +35,7 @@ async function main() {
   // Validate addresses
   if (tokenAddress === "YOUR_TEST_TOKEN_ADDRESS" || handlerAddress === "YOUR_ORDER_HANDLER_ADDRESS") {
     console.error("Please update the contract addresses in the script or deploy the contracts first!");
-    console.error("You can deploy the contracts using: npx hardhat run scripts/deployAndInteract.js --network sepolia");
+    console.error(`You can deploy the contracts using: npx hardhat run scripts/deployAndInteract.js --network ${networkName}`);
     process.exit(1);
   }
 
