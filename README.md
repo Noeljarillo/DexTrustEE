@@ -29,7 +29,7 @@ BlackBook consists of three main components:
 
 ## ⚡ T1 Protocol Integration
 
-BlackBook is deployed on [T1 Protocol](https://explorer.v006.t1protocol.com/address/0x934F38B0B492d77bdD4d2e5800476e514fe89437?tab=contract), leveraging its incredible fast block times to enhance our DEX capabilities:
+BlackBook is deployed on T1 Protocol - [View Contract on T1 Scan Explorer](https://explorer.v006.t1protocol.com/address/0x934F38B0B492d77bdD4d2e5800476e514fe89437?tab=contract), leveraging its incredible fast block times to enhance our DEX capabilities:
 
 - **Increased Throughput**: T1's superior block time dramatically increases the maximum number of orders processed per second compared to Ethereum mainnet
 - **Rapid Order Matching**: Eliminates slowness inherent in Ethereum's block time, enabling near-instant trade matching
