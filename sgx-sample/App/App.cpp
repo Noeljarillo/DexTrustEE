@@ -215,6 +215,42 @@ void ocall_log_message(const char* message)
     }
 }
 
+// Function to send HTTP response
+void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
+    char status_text[32];
+    switch (status_code) {
+        case 200: strcpy(status_text, "OK"); break;
+        case 400: strcpy(status_text, "Bad Request"); break;
+        case 404: strcpy(status_text, "Not Found"); break;
+        case 405: strcpy(status_text, "Method Not Allowed"); break;
+        case 500: strcpy(status_text, "Internal Server Error"); break;
+        default: strcpy(status_text, "Unknown"); break;
+    }
+    
+    char response[BUFFER_SIZE];
+    int content_length = (int)strlen(body);
+    
+    snprintf(response, BUFFER_SIZE,
+             "HTTP/1.1 %d %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %d\r\n"
+             "Connection: close\r\n"
+             "Access-Control-Allow-Origin: *\r\n"
+             "\r\n"
+             "%s",
+             status_code, status_text, content_type, content_length, body);
+    
+    printf("[DEBUG] Sending response: %d %s, Content-Length: %d\n", 
+           status_code, status_text, content_length);
+    
+    int bytes_sent = (int)send(client_socket, response, strlen(response), 0);
+    printf("[DEBUG] Sent %d bytes\n", bytes_sent);
+    
+    if (bytes_sent < 0) {
+        printf("[ERROR] Failed to send response: %s\n", strerror(errno));
+    }
+}
+
 // Function to parse HTTP request and extract method, path, and query string
 int parse_http_request(const char* request, char* method, char* path, char* query_string) {
     // Check for null pointers
@@ -439,7 +475,8 @@ void handle_http_request(int client_socket) {
         // Add order to the book
         char order_id[64] = {0};
         printf("[DEBUG] Calling enclave function ecall_add_order\n");
-        sgx_status_t status = ecall_add_order(global_eid, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
+        sgx_status_t status = SGX_SUCCESS;
+        ecall_add_order(global_eid, &status, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
         
         printf("[DEBUG] Enclave call completed with status: %d, order_id: %s\n", status, order_id);
         
@@ -514,42 +551,6 @@ void handle_http_request(int client_socket) {
     
     printf("[DEBUG] Closing client socket\n");
     close(client_socket);
-}
-
-// Function to send HTTP response
-void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
-    char status_text[32];
-    switch (status_code) {
-        case 200: strcpy(status_text, "OK"); break;
-        case 400: strcpy(status_text, "Bad Request"); break;
-        case 404: strcpy(status_text, "Not Found"); break;
-        case 405: strcpy(status_text, "Method Not Allowed"); break;
-        case 500: strcpy(status_text, "Internal Server Error"); break;
-        default: strcpy(status_text, "Unknown"); break;
-    }
-    
-    char response[BUFFER_SIZE];
-    int content_length = (int)strlen(body);
-    
-    snprintf(response, BUFFER_SIZE,
-             "HTTP/1.1 %d %s\r\n"
-             "Content-Type: %s\r\n"
-             "Content-Length: %d\r\n"
-             "Connection: close\r\n"
-             "Access-Control-Allow-Origin: *\r\n"
-             "\r\n"
-             "%s",
-             status_code, status_text, content_type, content_length, body);
-    
-    printf("[DEBUG] Sending response: %d %s, Content-Length: %d\n", 
-           status_code, status_text, content_length);
-    
-    int bytes_sent = (int)send(client_socket, response, strlen(response), 0);
-    printf("[DEBUG] Sent %d bytes\n", bytes_sent);
-    
-    if (bytes_sent < 0) {
-        printf("[ERROR] Failed to send response: %s\n", strerror(errno));
-    }
 }
 
 // Function to start HTTP server
