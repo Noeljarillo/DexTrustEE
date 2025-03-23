@@ -320,17 +320,7 @@ def main():
     args = parser.parse_args()
     
     # Set log level
-    logger.setLevel(getattr(logging, args.log_level))
-    
-    if not RPC_URL:
-        logger.error("SEPOLIA_RPC_URL environment variable not set")
-        return
-    
-    if not CONTRACT_ADDRESS:
-        logger.error("CONTRACT_ADDRESS environment variable not set")
-        return
-    
-    logger.info("Starting Ethereum event listener...")
+
     return start_polling(duration_seconds=args.duration)
 
 if __name__ == "__main__":
