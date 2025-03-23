@@ -374,7 +374,10 @@ public:
 
     // Clear all orders and trades
     void clear_all_data() {
-        printf("[Enclave] Clearing all orders and trades\n");
+        char log_buf[256];
+        
+        snprintf(log_buf, sizeof(log_buf), "[Enclave] Clearing all orders and trades");
+        ocall_log_message(log_buf);
         
         // Clear the priority queues
         while (!buy_orders.empty()) {
@@ -391,7 +394,8 @@ public:
         // Clear the trades vector
         trades.clear();
         
-        printf("[Enclave] All orders and trades have been cleared\n");
+        snprintf(log_buf, sizeof(log_buf), "[Enclave] All orders and trades have been cleared");
+        ocall_log_message(log_buf);
     }
 };
 
