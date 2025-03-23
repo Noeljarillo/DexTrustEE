@@ -38,3 +38,14 @@
 typedef void *buffer_t;
 typedef int array_t[10];
 
+#ifndef USER_TYPES_H
+#define USER_TYPES_H
+
+/* Define time_t if not already defined */
+#ifndef _TIME_T_DEFINED
+typedef long time_t;
+#define _TIME_T_DEFINED
+#endif
+
+#endif /* USER_TYPES_H */
+

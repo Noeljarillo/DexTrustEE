@@ -34,6 +34,7 @@
 enclave {
     
     include "user_types.h"
+    include "time.h"
 
     /* Import ECALL/OCALL from sub-directory EDLs.
      *  [from]: specifies the location of EDL file. 
