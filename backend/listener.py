@@ -3,6 +3,7 @@ import json
 import time
 import argparse
 import logging
+import requests
 from web3 import Web3
 from dotenv import load_dotenv
 import os
@@ -24,6 +25,7 @@ load_dotenv()
 RPC_URL = os.getenv('SEPOLIA_RPC_URL')
 CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
 DB_PATH = './backend/order_events.db'
+TEE_URL = os.getenv('TEE_URL', 'http://172.191.42.99:8080')
 
 
 ABI_JSON = '''[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"token","type":"address"},{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"AssetWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"sender","type":"address"},{"indexed":true,"internalType":"address","name":"token","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint8","name":"orderType","type":"uint8"},{"indexed":false,"internalType":"uint256","name":"size","type":"uint256"},{"indexed":false,"internalType":"string","name":"side","type":"string"},{"indexed":false,"internalType":"string","name":"marketCode","type":"string"}],"name":"OrderPlaced","type":"event"},{"stateMutability":"payable","type":"fallback"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint8","name":"orderType","type":"uint8"},{"internalType":"uint256","name":"size","type":"uint256"},{"internalType":"string","name":"side","type":"string"},{"internalType":"string","name":"marketCode","type":"string"}],"name":"placeEthOrder","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint8","name":"orderType","type":"uint8"},{"internalType":"uint256","name":"size","type":"uint256"},{"internalType":"string","name":"side","type":"string"},{"internalType":"string","name":"marketCode","type":"string"}],"name":"placeTokenOrder","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"address","name":"recipient","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"withdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}]'''
@@ -129,6 +131,51 @@ def handle_order_placed(event, w3):
     
     conn.commit()
     conn.close()
+    
+    # Post order to TEE
+    try:
+        # Map blockchain order parameters to TEE API parameters
+        # The order_type from the blockchain is a uint8, convert it to 'limit' or 'market'
+        order_type = 'limit' if event['args']['orderType'] == 0 else 'market'
+        
+        # Use Web3 to convert the amount to a more readable format (ETH instead of Wei)
+        # This might need adjustment depending on token decimals
+        price = 100  # Default price for market orders
+        quantity = float(w3.from_wei(event['args']['size'], 'ether'))
+        
+        # For limit orders, try to extract price from market code or other parameters
+        # This is a placeholder logic - adjust based on your actual implementation
+        if order_type == 'limit' and ':' in event['args']['marketCode']:
+            try:
+                price = float(event['args']['marketCode'].split(':')[1])
+            except (IndexError, ValueError):
+                logger.warning(f"Couldn't extract price from market code: {event['args']['marketCode']}")
+        
+        tee_payload = {
+            'user': event['args']['sender'],
+            'type': order_type,
+            'side': event['args']['side'].lower(),  # Ensure lowercase for API compatibility
+            'quantity': quantity
+        }
+        
+        # Add price for limit orders
+        if order_type == 'limit':
+            tee_payload['price'] = price
+        
+        logger.info(f"Posting order to TEE: {tee_payload}")
+        tee_response = requests.post(
+            f"{TEE_URL}/order", 
+            params=tee_payload
+        )
+        
+        if tee_response.status_code == 200:
+            order_id = tee_response.json().get('order_id')
+            logger.info(f"Order successfully posted to TEE. Order ID: {order_id}")
+        else:
+            logger.error(f"Failed to post order to TEE: Status {tee_response.status_code}, Response: {tee_response.text}")
+    
+    except Exception as e:
+        logger.error(f"Error posting order to TEE: {str(e)}")
     
     logger.info(f"OrderPlaced event saved: TX {event['transactionHash'].hex()} in block {event['blockNumber']}")
 
@@ -254,6 +301,46 @@ def initialize_and_process_events():
     }
 
 
+def fetch_tee_trades():
+    """Fetch executed trades from the TEE."""
+    try:
+        response = requests.get(f"{TEE_URL}/trades")
+        if response.status_code == 200:
+            trades = response.json()
+            logger.info(f"Successfully fetched {len(trades)} trades from TEE")
+            return trades
+        else:
+            logger.error(f"Failed to fetch trades from TEE: Status {response.status_code}, Response: {response.text}")
+            return []
+    except Exception as e:
+        logger.error(f"Error fetching trades from TEE: {str(e)}")
+        return []
+
+
+def reconcile_trades():
+    """Reconcile trades between blockchain events and TEE trades.
+    
+    This function can be called periodically to check for trades that have been executed
+    in the TEE but haven't been settled on-chain yet.
+    """
+    trades = fetch_tee_trades()
+    if not trades:
+        logger.info("No trades to reconcile")
+        return
+    
+    # In a real implementation, you would:
+    # 1. Check which trades have been executed in the TEE but not yet on-chain
+    # 2. Initiate on-chain settlement for those trades
+    # 3. Update the local database to mark those trades as reconciled
+    
+    # For now, we'll just log the trades
+    logger.info(f"Trades to reconcile: {trades}")
+    
+    # TODO: Implement actual reconciliation logic
+    # This might involve calling the executor.py to send on-chain transactions
+    # for each trade that needs settlement
+
+
 def start_polling(duration_seconds=None):
     """Start polling for new events.
     
@@ -278,6 +365,9 @@ def start_polling(duration_seconds=None):
             try:
                 logger.debug("Waiting 15 seconds before next check...")
                 time.sleep(15)
+                
+                # Reconcile trades every polling cycle
+                reconcile_trades()
                 
                 current_block = w3.eth.block_number
                 
@@ -309,6 +399,57 @@ def start_polling(duration_seconds=None):
         logger.error(f"Error during polling: {str(e)}")
         return f"Error: {str(e)}"
 
+def test_tee_integration(order_type="limit", side="buy", price=100, quantity=0.2):
+    """Test the TEE integration by simulating an order and posting it to the TEE.
+    
+    Args:
+        order_type: Either 'limit' or 'market'
+        side: Either 'buy' or 'sell'
+        price: The price for limit orders (ignored for market orders)
+        quantity: The quantity of the order
+    
+    Returns:
+        The response from the TEE, or None if there was an error
+    """
+    try:
+        # Prepare the payload
+        tee_payload = {
+            'user': "0x" + "0" * 40,  # Dummy address
+            'type': order_type,
+            'side': side,
+            'quantity': quantity
+        }
+        
+        # Add price for limit orders
+        if order_type.lower() == 'limit':
+            tee_payload['price'] = price
+        
+        logger.info(f"Testing TEE integration with payload: {tee_payload}")
+        
+        # Send the order to the TEE
+        response = requests.post(
+            f"{TEE_URL}/order", 
+            params=tee_payload
+        )
+        
+        if response.status_code == 200:
+            order_id = response.json().get('order_id')
+            logger.info(f"Test order successfully posted to TEE. Order ID: {order_id}")
+            
+            # Fetch trades to see if any were created
+            trades = fetch_tee_trades()
+            logger.info(f"Current trades after test order: {trades}")
+            
+            return response.json()
+        else:
+            logger.error(f"Failed to post test order to TEE: Status {response.status_code}, Response: {response.text}")
+            return None
+    
+    except Exception as e:
+        logger.error(f"Error testing TEE integration: {str(e)}")
+        return None
+
+
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(description='Ethereum Event Listener')
@@ -316,10 +457,35 @@ def main():
                         help='Duration in seconds to run the listener. If not provided, runs indefinitely.')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help='Set the logging level')
+    parser.add_argument('--test-tee', action='store_true',
+                        help='Test the TEE integration with a simulated order')
+    parser.add_argument('--order-type', choices=['limit', 'market'], default='limit',
+                        help='Order type for testing (limit or market)')
+    parser.add_argument('--side', choices=['buy', 'sell'], default='buy',
+                        help='Order side for testing (buy or sell)')
+    parser.add_argument('--price', type=float, default=100.0,
+                        help='Price for limit orders (ignored for market orders)')
+    parser.add_argument('--quantity', type=float, default=0.2,
+                        help='Quantity for the test order')
     
     args = parser.parse_args()
     
     # Set log level
+    logging.getLogger().setLevel(getattr(logging, args.log_level))
+    
+    # Test the TEE integration if requested
+    if args.test_tee:
+        result = test_tee_integration(
+            order_type=args.order_type,
+            side=args.side,
+            price=args.price,
+            quantity=args.quantity
+        )
+        if result:
+            print(f"Test successful! Response: {result}")
+        else:
+            print("Test failed. Check the logs for details.")
+        return
 
     return start_polling(duration_seconds=args.duration)
 
