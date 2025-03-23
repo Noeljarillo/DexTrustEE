@@ -422,7 +422,7 @@ void handle_http_request(int client_socket) {
         double quantity = atof(quantity_str);
         
         // Validate Ethereum address (simple check)
-        if (strlen(user_address) < 40) {
+        if (strlen(user_address) < 10) {
             send_http_response(client_socket, 400, "text/plain", "Invalid Ethereum address");
             close(client_socket);
             return;
