@@ -475,8 +475,10 @@ void handle_http_request(int client_socket) {
         // Add order to the book
         char order_id[64] = {0};
         printf("[DEBUG] Calling enclave function ecall_add_order\n");
-        sgx_status_t status = SGX_SUCCESS;
-        ecall_add_order(global_eid, &status, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
+        
+        // Fix: Call ecall_add_order with the correct parameter order
+        sgx_status_t status = ecall_add_order(global_eid, user_address, order_type, order_side, 
+                                             price, quantity, order_id, sizeof(order_id));
         
         printf("[DEBUG] Enclave call completed with status: %d, order_id: %s\n", status, order_id);
         
