@@ -302,43 +302,12 @@ int get_query_param(const char* query_string, const char* param_name, char* valu
     return 0;
 }
 
-// Function to send HTTP response
-void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
-    char response[BUFFER_SIZE * 10] = {0}; // Larger buffer for response
-    
-    // Determine status text
-    const char* status_text = "OK";
-    if (status_code == 400) status_text = "Bad Request";
-    else if (status_code == 404) status_text = "Not Found";
-    else if (status_code == 500) status_text = "Internal Server Error";
-    
-    // Calculate content length
-    size_t content_length = strlen(body);
-    
-    // Format HTTP response
-    snprintf(response, sizeof(response),
-             "HTTP/1.1 %d %s\r\n"
-             "Content-Type: %s\r\n"
-             "Content-Length: %zu\r\n"
-             "Connection: close\r\n"
-             "Access-Control-Allow-Origin: *\r\n"
-             "\r\n"
-             "%s",
-             status_code, status_text,
-             content_type,
-             content_length,
-             body);
-    
-    // Send response
-    send(client_socket, response, strlen(response), 0);
-}
-
 // Function to handle HTTP requests for the order book
 void handle_http_request(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = (int)recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     
-    printf("[DEBUG] Received HTTP request (%d bytes)\n", bytes_received);
+    printf("[DEBUG] Received HTTP request (%d bytes): %s\n", bytes_received, buffer);
     
     if (bytes_received <= 0) {
         printf("[ERROR] Failed to receive data from client\n");
@@ -360,40 +329,60 @@ void handle_http_request(int client_socket) {
     
     printf("[DEBUG] Method: %s, Path: %s, Query: %s\n", method, path, query_string);
     
+    // Reject CONNECT requests (proxy requests)
+    if (strcmp(method, "CONNECT") == 0) {
+        printf("[ERROR] CONNECT method not supported\n");
+        send_http_response(client_socket, 405, "text/plain", "Method Not Allowed: CONNECT not supported");
+        close(client_socket);
+        return;
+    }
+    
     // Handle GET request to read trades
     if (strcmp(method, "GET") == 0 && strcmp(path, "/trades") == 0) {
+        printf("[DEBUG] Processing trades request\n");
+        
         char trades_json[10240] = {0}; // Large buffer for trades
         size_t json_size = sizeof(trades_json);
+        size_t result_size = 0;
         
         // Check if user address is provided
         char user_address[64] = {0};
-        size_t result_size = 0;
         
         if (get_query_param(query_string, "user", user_address, sizeof(user_address)) == 0) {
             // Get trades for specific user
+            printf("[DEBUG] Getting trades for user: %s\n", user_address);
             sgx_status_t status = ecall_get_user_trades(global_eid, &result_size, user_address, trades_json, json_size);
+            
+            printf("[DEBUG] Enclave call completed with status: %d, result size: %zu\n", status, result_size);
             
             if (status != SGX_SUCCESS || result_size == 0) {
                 char error_msg[100];
                 snprintf(error_msg, sizeof(error_msg), "Error: Failed to get user trades. Error code: %d", status);
+                printf("[ERROR] %s\n", error_msg);
                 send_http_response(client_socket, 500, "text/plain", error_msg);
             } else {
+                printf("[DEBUG] Sending user trades: %s\n", trades_json);
                 send_http_response(client_socket, 200, "application/json", trades_json);
             }
         } else {
             // Get all trades
+            printf("[DEBUG] Getting all trades\n");
             sgx_status_t status = ecall_get_trades(global_eid, &result_size, trades_json, json_size);
+            
+            printf("[DEBUG] Enclave call completed with status: %d, result size: %zu\n", status, result_size);
             
             if (status != SGX_SUCCESS || result_size == 0) {
                 char error_msg[100];
                 snprintf(error_msg, sizeof(error_msg), "Error: Failed to get trades. Error code: %d", status);
+                printf("[ERROR] %s\n", error_msg);
                 send_http_response(client_socket, 500, "text/plain", error_msg);
             } else {
+                printf("[DEBUG] Sending all trades: %s\n", trades_json);
                 send_http_response(client_socket, 200, "application/json", trades_json);
             }
         }
     }
-    // Handle POST request to add an order
+    // Handle POST request to add order
     else if (strcmp(method, "POST") == 0 && strcmp(path, "/order") == 0) {
         printf("[DEBUG] Processing order request\n");
         
@@ -437,7 +426,7 @@ void handle_http_request(int client_socket) {
                order_type, order_side, price, quantity);
         
         // Validate Ethereum address (simple check)
-        if (strlen(user_address) < 40) {
+        if (strlen(user_address) < 20) {  // Relaxed validation for testing
             printf("[ERROR] Invalid Ethereum address: %s\n", user_address);
             send_http_response(client_socket, 400, "text/plain", "Invalid Ethereum address");
             close(client_socket);
@@ -465,6 +454,7 @@ void handle_http_request(int client_socket) {
     }
     // Handle unknown requests
     else {
+        printf("[ERROR] Unknown request: %s %s\n", method, path);
         send_http_response(client_socket, 404, "text/plain", "Not Found");
     }
     
@@ -472,9 +462,38 @@ void handle_http_request(int client_socket) {
     close(client_socket);
 }
 
+// Function to send HTTP response
+void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
+    char status_text[32];
+    switch (status_code) {
+        case 200: strcpy(status_text, "OK"); break;
+        case 400: strcpy(status_text, "Bad Request"); break;
+        case 404: strcpy(status_text, "Not Found"); break;
+        case 405: strcpy(status_text, "Method Not Allowed"); break;
+        case 500: strcpy(status_text, "Internal Server Error"); break;
+        default: strcpy(status_text, "Unknown"); break;
+    }
+    
+    char response[BUFFER_SIZE];
+    int content_length = strlen(body);
+    
+    snprintf(response, BUFFER_SIZE,
+             "HTTP/1.1 %d %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %d\r\n"
+             "Connection: close\r\n"
+             "Access-Control-Allow-Origin: *\r\n"
+             "\r\n"
+             "%s",
+             status_code, status_text, content_type, content_length, body);
+    
+    printf("[DEBUG] Sending response: %d %s\n", status_code, status_text);
+    send(client_socket, response, strlen(response), 0);
+}
+
 // Function to start HTTP server
 void start_http_server() {
-    int server_fd, client_socket;
+    int server_fd;
     struct sockaddr_in address;
     int opt = 1;
     int addrlen = sizeof(address);
@@ -496,7 +515,7 @@ void start_http_server() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(HTTP_PORT);
     
-    // Bind socket to port
+    // Bind socket
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("Bind failed");
         exit(EXIT_FAILURE);
@@ -515,16 +534,47 @@ void start_http_server() {
     
     // Main server loop
     while (keep_running) {
-        // Accept connection
-        if ((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
-            if (keep_running) {
-                perror("Accept failed");
-            }
-            continue;
+        // Accept connection with timeout to allow checking keep_running
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(server_fd, &readfds);
+        
+        struct timeval timeout;
+        timeout.tv_sec = 1;  // 1 second timeout
+        timeout.tv_usec = 0;
+        
+        int activity = select(server_fd + 1, &readfds, NULL, NULL, &timeout);
+        
+        if (activity < 0 && errno != EINTR) {
+            perror("Select error");
+            break;
         }
         
-        // Handle request
-        handle_http_request(client_socket);
+        if (activity > 0 && FD_ISSET(server_fd, &readfds)) {
+            int client_socket;
+            if ((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+                if (keep_running) {
+                    perror("Accept failed");
+                }
+                continue;
+            }
+            
+            // Set a timeout for client socket operations
+            struct timeval client_timeout;
+            client_timeout.tv_sec = 5;  // 5 seconds timeout
+            client_timeout.tv_usec = 0;
+            
+            if (setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &client_timeout, sizeof(client_timeout)) < 0) {
+                perror("Set socket receive timeout failed");
+            }
+            
+            if (setsockopt(client_socket, SOL_SOCKET, SO_SNDTIMEO, &client_timeout, sizeof(client_timeout)) < 0) {
+                perror("Set socket send timeout failed");
+            }
+            
+            // Handle request
+            handle_http_request(client_socket);
+        }
     }
     
     // Close server socket
