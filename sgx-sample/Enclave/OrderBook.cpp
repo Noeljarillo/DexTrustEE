@@ -29,21 +29,23 @@ private:
     // Generate a unique order ID
     std::string generate_order_id() {
         static int counter = 0;
-        std::stringstream ss;
         time_t now;
         ocall_get_current_time(&now);
-        ss << std::hex << now << "-" << ++counter;
-        return ss.str();
+        
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%lx-%d", (long)now, ++counter);
+        return std::string(buffer);
     }
     
     // Generate a unique trade ID
     std::string generate_trade_id() {
         static int counter = 0;
-        std::stringstream ss;
         time_t now;
         ocall_get_current_time(&now);
-        ss << std::hex << now << "-trade-" << ++counter;
-        return ss.str();
+        
+        char buffer[64];
+        snprintf(buffer, sizeof(buffer), "%lx-trade-%d", (long)now, ++counter);
+        return std::string(buffer);
     }
     
     // Match a market order
@@ -337,27 +339,37 @@ public:
     
     // Convert trades to JSON
     std::string trades_to_json(const std::vector<Trade>& trades_list) {
-        std::stringstream ss;
-        ss << "[";
+        std::string result = "[";
         bool first = true;
+        
         for (const auto& trade : trades_list) {
             if (!first) {
-                ss << ",";
+                result += ",";
             }
             first = false;
             
-            ss << "{";
-            ss << "\"id\":\"" << trade.id << "\",";
-            ss << "\"maker\":\"" << trade.maker_address << "\",";
-            ss << "\"taker\":\"" << trade.taker_address << "\",";
-            ss << "\"taker_side\":" << (trade.taker_side == BUY ? "\"buy\"" : "\"sell\"") << ",";
-            ss << "\"price\":" << trade.price << ",";
-            ss << "\"quantity\":" << trade.quantity << ",";
-            ss << "\"timestamp\":" << trade.timestamp;
-            ss << "}";
+            char trade_json[256];
+            snprintf(trade_json, sizeof(trade_json), 
+                    "{\"id\":\"%s\","
+                    "\"maker\":\"%s\","
+                    "\"taker\":\"%s\","
+                    "\"taker_side\":\"%s\","
+                    "\"price\":%.2f,"
+                    "\"quantity\":%.2f,"
+                    "\"timestamp\":%ld}",
+                    trade.id.c_str(),
+                    trade.maker_address.c_str(),
+                    trade.taker_address.c_str(),
+                    (trade.taker_side == BUY ? "buy" : "sell"),
+                    trade.price,
+                    trade.quantity,
+                    (long)trade.timestamp);
+            
+            result += trade_json;
         }
-        ss << "]";
-        return ss.str();
+        
+        result += "]";
+        return result;
     }
 };
 
