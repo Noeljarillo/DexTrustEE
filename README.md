@@ -39,6 +39,19 @@ BlackBook is deployed on T1 Protocol - [View Contract on T1 Scan Explorer](https
 
 This technology integration allows BlackBook to achieve the security benefits of decentralization while maintaining the performance characteristics traders expect from centralized platforms.
 
+## Order Book Design
+The order book implementation is separated into two components:
+
+1. **Trusted Environment**: The order book is implemented in a trusted environment using Intel SGX. This ensures that the order book is secure and tamper-resistant. Calculations and data are store in the enclave. This order book supports market and limit orders.
+2. **Application Layer**: The application layer consists of an API written in C++, and includes 3 endpoints: 
+    - Create order
+    - Read trades
+    - Read trades per user
+
+From the application layer the back-end is able to read the trades from the trusted environment and execute the transactions on-chain.
+
+![alt text](image.png)
+
 ## 💡 Built at ETH Global
 
 BlackBook was developed during ETH Global hackathon, combining the best of blockchain technology with trusted execution environments to solve real-world problems in decentralized finance.
