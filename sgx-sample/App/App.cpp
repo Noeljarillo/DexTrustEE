@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 # include <unistd.h>
 # include <pwd.h>
@@ -181,6 +182,19 @@ void ocall_print_string(const char *str)
     printf("%s", str);
 }
 
+void ocall_get_current_time(time_t* time_value)
+{
+    if (time_value) {
+        *time_value = time(NULL);
+    }
+}
+
+void ocall_log_message(const char* message)
+{
+    if (message) {
+        printf("[App Log] %s\n", message);
+    }
+}
 
 /* Application entry */
 int SGX_CDECL main(int argc, char *argv[])
