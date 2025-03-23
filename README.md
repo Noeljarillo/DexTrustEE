@@ -8,6 +8,7 @@
 
 BlackBook combines the transparency of blockchain with the privacy of secure enclaves to create a revolutionary decentralized exchange platform. Our solution leverages Intel SGX (Software Guard Extensions) technology to execute trades in a trusted and secure environment.
 
+[View Presentation](https://docs.google.com/presentation/d/1234567890/edit)
 ## ✨ Key Features
 
 - 🔒 **Secure Trade Execution**: Orders processed in trusted SGX enclaves
