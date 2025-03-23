@@ -406,12 +406,13 @@ size_t ecall_get_trades(char* trades_json, size_t json_size) {
     std::vector<Trade> all_trades = get_order_book()->get_trades();
     
     // Debug output to see if trades exist
-    printf("[Enclave] Getting all trades, found %zu trades\n", all_trades.size());
+    printf("[Enclave] Getting all trades, found %lu trades\n", (unsigned long)all_trades.size());
     
     std::string json_str = get_order_book()->trades_to_json(all_trades);
     
     // Debug output to see JSON string size
-    printf("[Enclave] JSON string length: %zu, buffer size: %zu\n", json_str.length(), json_size);
+    printf("[Enclave] JSON string length: %lu, buffer size: %lu\n", 
+           (unsigned long)json_str.length(), (unsigned long)json_size);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
@@ -431,13 +432,14 @@ size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t
     std::vector<Trade> user_trades = get_order_book()->get_user_trades(address);
     
     // Debug output to see if user trades exist
-    printf("[Enclave] Getting trades for user %s, found %zu trades\n", 
-           user_address, user_trades.size());
+    printf("[Enclave] Getting trades for user %s, found %lu trades\n", 
+           user_address, (unsigned long)user_trades.size());
     
     std::string json_str = get_order_book()->trades_to_json(user_trades);
     
     // Debug output to see JSON string size
-    printf("[Enclave] JSON string length: %zu, buffer size: %zu\n", json_str.length(), json_size);
+    printf("[Enclave] JSON string length: %lu, buffer size: %lu\n", 
+           (unsigned long)json_str.length(), (unsigned long)json_size);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
