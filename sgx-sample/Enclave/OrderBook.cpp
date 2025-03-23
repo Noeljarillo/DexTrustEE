@@ -406,17 +406,20 @@ size_t ecall_get_trades(char* trades_json, size_t json_size) {
     std::vector<Trade> all_trades = get_order_book()->get_trades();
     
     // Debug output to see if trades exist
-    printf("[Enclave] Getting all trades, found %d trades\n", (int)all_trades.size());
+    char log_buf[256];
+    snprintf(log_buf, sizeof(log_buf), "[Enclave] Getting all trades, found %d trades", (int)all_trades.size());
+    ocall_log_message(log_buf);
     
     std::string json_str = get_order_book()->trades_to_json(all_trades);
     
     // Debug output to see JSON string size
-    printf("[Enclave] JSON string length: %d, buffer size: %d\n", 
-           (int)json_str.length(), (int)json_size);
+    snprintf(log_buf, sizeof(log_buf), "[Enclave] JSON string length: %d, buffer size: %d", 
+             (int)json_str.length(), (int)json_size);
+    ocall_log_message(log_buf);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
-        printf("[Enclave] ERROR: Buffer too small for trades JSON\n");
+        ocall_log_message("[Enclave] ERROR: Buffer too small for trades JSON");
         return 0; // Buffer too small
     }
     
@@ -432,18 +435,21 @@ size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t
     std::vector<Trade> user_trades = get_order_book()->get_user_trades(address);
     
     // Debug output to see if user trades exist
-    printf("[Enclave] Getting trades for user %s, found %d trades\n", 
-           user_address, (int)user_trades.size());
+    char log_buf[256];
+    snprintf(log_buf, sizeof(log_buf), "[Enclave] Getting trades for user %s, found %d trades", 
+             user_address, (int)user_trades.size());
+    ocall_log_message(log_buf);
     
     std::string json_str = get_order_book()->trades_to_json(user_trades);
     
     // Debug output to see JSON string size
-    printf("[Enclave] JSON string length: %d, buffer size: %d\n", 
-           (int)json_str.length(), (int)json_size);
+    snprintf(log_buf, sizeof(log_buf), "[Enclave] JSON string length: %d, buffer size: %d", 
+             (int)json_str.length(), (int)json_size);
+    ocall_log_message(log_buf);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
-        printf("[Enclave] ERROR: Buffer too small for user trades JSON\n");
+        ocall_log_message("[Enclave] ERROR: Buffer too small for user trades JSON");
         return 0; // Buffer too small
     }
     
