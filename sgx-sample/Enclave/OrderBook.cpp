@@ -13,13 +13,20 @@
 
 class OrderBookImpl {
 private:
-    std::map<std::string, Order> orders;
-    
+    // Priority queues for buy and sell orders
     std::priority_queue<Order, std::vector<Order>, BuyOrderComparator> buy_orders;
     std::priority_queue<Order, std::vector<Order>, SellOrderComparator> sell_orders;
     
+    // Map of all orders by ID
+    std::map<std::string, Order> orders;
+    
+    // List of all trades
     std::vector<Trade> trades;
     
+    // Singleton instance
+    static OrderBookImpl* instance;
+
+    // Generate a unique order ID
     std::string generate_order_id() {
         static int counter = 0;
         std::stringstream ss;
@@ -29,12 +36,13 @@ private:
         return ss.str();
     }
     
+    // Generate a unique trade ID
     std::string generate_trade_id() {
         static int counter = 0;
         std::stringstream ss;
         time_t now;
         ocall_get_current_time(&now);
-        ss << std::hex << now << "-T-" << ++counter;
+        ss << std::hex << now << "-trade-" << ++counter;
         return ss.str();
     }
     
@@ -277,6 +285,15 @@ private:
     }
 
 public:
+    // Get singleton instance
+    static OrderBookImpl* getInstance() {
+        if (instance == nullptr) {
+            instance = new OrderBookImpl();
+        }
+        return instance;
+    }
+    
+    // Add an order to the book
     std::string add_order(const std::string& user_address, OrderType type, 
                          OrderSide side, double price, double quantity) {
         Order order;
@@ -302,10 +319,12 @@ public:
         return order.id;
     }
     
+    // Get all trades
     std::vector<Trade> get_trades() {
         return trades;
     }
     
+    // Get trades for a specific user
     std::vector<Trade> get_user_trades(const std::string& user_address) {
         std::vector<Trade> user_trades;
         for (const auto& trade : trades) {
@@ -315,7 +334,7 @@ public:
         }
         return user_trades;
     }
-
+    
     // Convert trades to JSON
     std::string trades_to_json(const std::vector<Trade>& trades_list) {
         std::stringstream ss;
@@ -340,18 +359,15 @@ public:
         ss << "]";
         return ss.str();
     }
-
-    // Singleton instance
-    static OrderBookImpl* instance = nullptr;
-
-    // Get singleton instance
-    static OrderBookImpl* getInstance() {
-        if (instance == nullptr) {
-            instance = new OrderBookImpl();
-        }
-        return instance;
-    }
 };
+
+// Initialize the static member outside the class
+OrderBookImpl* OrderBookImpl::instance = nullptr;
+
+// Helper function to get the order book instance
+OrderBookImpl* get_order_book() {
+    return OrderBookImpl::getInstance();
+}
 
 // Add an order to the book
 void ecall_add_order(const char* user_address, int order_type, 
@@ -361,7 +377,7 @@ void ecall_add_order(const char* user_address, int order_type,
     OrderType type = static_cast<OrderType>(order_type);
     OrderSide side = static_cast<OrderSide>(order_side);
     
-    std::string result = OrderBookImpl::getInstance()->add_order(address, type, side, price, quantity);
+    std::string result = get_order_book()->add_order(address, type, side, price, quantity);
     
     // Copy the order ID to the output buffer
     if (result.length() < id_size) {
@@ -375,8 +391,8 @@ void ecall_add_order(const char* user_address, int order_type,
 
 // Get all trades
 size_t ecall_get_trades(char* trades_json, size_t json_size) {
-    std::vector<Trade> all_trades = OrderBookImpl::getInstance()->get_trades();
-    std::string json_str = OrderBookImpl::getInstance()->trades_to_json(all_trades);
+    std::vector<Trade> all_trades = get_order_book()->get_trades();
+    std::string json_str = get_order_book()->trades_to_json(all_trades);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
@@ -392,8 +408,8 @@ size_t ecall_get_trades(char* trades_json, size_t json_size) {
 // Get trades for a specific user
 size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t json_size) {
     std::string address(user_address);
-    std::vector<Trade> user_trades = OrderBookImpl::getInstance()->get_user_trades(address);
-    std::string json_str = OrderBookImpl::getInstance()->trades_to_json(user_trades);
+    std::vector<Trade> user_trades = get_order_book()->get_user_trades(address);
+    std::string json_str = get_order_book()->trades_to_json(user_trades);
     
     // Check if buffer is large enough
     if (json_str.length() >= json_size) {
