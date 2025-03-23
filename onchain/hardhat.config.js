@@ -24,7 +24,20 @@ module.exports = {
     },
   },
   etherscan: {
-    apiKey: ETHERSCAN_API_KEY
+    apiKey: {
+      sepolia: ETHERSCAN_API_KEY,
+      t1: 'empty'  // T1 doesn't require an actual API key
+    },
+    customChains: [
+      {
+        network: "t1",
+        chainId: 299792,
+        urls: {
+          apiURL: "https://explorer.v006.t1protocol.com/api",
+          browserURL: "https://explorer.v006.t1protocol.com"
+        }
+      }
+    ]
   },
   paths: {
     sources: "./onchain/contracts",

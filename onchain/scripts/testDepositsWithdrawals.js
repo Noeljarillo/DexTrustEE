@@ -29,8 +29,8 @@ async function main() {
   }
 
   // Use provided addresses if artifacts not found
-  tokenAddress = tokenAddress || "YOUR_TEST_TOKEN_ADDRESS"; // Replace with your actual address if needed
-  handlerAddress = handlerAddress || "YOUR_ORDER_HANDLER_ADDRESS"; // Replace with your actual address if needed
+  tokenAddress = tokenAddress 
+  handlerAddress = handlerAddress
 
   // Validate addresses
   if (tokenAddress === "YOUR_TEST_TOKEN_ADDRESS" || handlerAddress === "YOUR_ORDER_HANDLER_ADDRESS") {
@@ -47,6 +47,46 @@ async function main() {
   console.log(`TestToken address: ${tokenAddress}`);
   console.log(`OrderHandler address: ${handlerAddress}`);
 
+  // Check for leftover funds from previous test runs and withdraw them first
+  console.log("\n--- Checking for leftover funds in contract ---");
+  const initialContractEthBalance = await hre.ethers.provider.getBalance(handlerAddress);
+  const initialContractTokenBalance = await testToken.balanceOf(handlerAddress);
+  
+  console.log(`Found ETH in contract: ${hre.ethers.formatEther(initialContractEthBalance)} ETH`);
+  console.log(`Found Tokens in contract: ${hre.ethers.formatEther(initialContractTokenBalance)} TEST`);
+  
+  // Withdraw any existing ETH
+  if (initialContractEthBalance > 0) {
+    console.log("\n--- Withdrawing leftover ETH from previous tests ---");
+    try {
+      const withdrawExistingEthTx = await orderHandler.withdraw(
+        "0x0000000000000000000000000000000000000000", // address(0) for ETH
+        deployer.address,
+        initialContractEthBalance
+      );
+      await withdrawExistingEthTx.wait();
+      console.log(`Initial ETH withdrawal transaction: ${withdrawExistingEthTx.hash}`);
+    } catch (error) {
+      console.log(`Failed to withdraw ETH: ${error.message}`);
+    }
+  }
+  
+  // Withdraw any existing tokens
+  if (initialContractTokenBalance > 0) {
+    console.log("\n--- Withdrawing leftover Tokens from previous tests ---");
+    try {
+      const withdrawExistingTokenTx = await orderHandler.withdraw(
+        tokenAddress,
+        deployer.address,
+        initialContractTokenBalance
+      );
+      await withdrawExistingTokenTx.wait();
+      console.log(`Initial Token withdrawal transaction: ${withdrawExistingTokenTx.hash}`);
+    } catch (error) {
+      console.log(`Failed to withdraw Tokens: ${error.message}`);
+    }
+  }
+
   // Check balances before operations
   const initialEthBalance = await hre.ethers.provider.getBalance(deployer.address);
   const initialTokenBalance = await testToken.balanceOf(deployer.address);
@@ -55,15 +95,15 @@ async function main() {
   console.log(`Token Balance: ${hre.ethers.formatEther(initialTokenBalance)} TEST`);
 
   // Define test parameters
-  const ethDepositAmount = hre.ethers.parseEther("0.1"); // 0.1 ETH per deposit
+  const ethDepositAmount = hre.ethers.parseEther("0.001");
   const tokenDepositAmount = hre.ethers.parseEther("100"); // 100 TEST tokens per deposit
-  const numDeposits = 5; // Number of deposits to make (5 * 0.1 = 0.5 ETH total)
+  const numDeposits = 20; 
   
   // Test parameters for orders
   const orderType = 1; // Market order
   const orderSize = 100; // Size in base units
   const side = "BUY"; // BUY or SELL
-  const marketCode = "ETH-USDT"; // Market identifier
+  const marketCode = "ETH-TST"; // Market identifier
 
   // Approve tokens for OrderHandler
   const totalTokensNeeded = tokenDepositAmount * BigInt(numDeposits);
