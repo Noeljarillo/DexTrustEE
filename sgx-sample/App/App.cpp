@@ -222,38 +222,46 @@ int parse_http_request(const char* request, char* method, char* path, char* quer
         return -1;
     }
     
-    // Extract method (GET, POST, etc.)
-    const char* space = strchr(request, ' ');
-    if (!space) {
+    printf("[DEBUG] Parsing HTTP request: %.50s...\n", request);
+    
+    // Extract method
+    const char* method_end = strchr(request, ' ');
+    if (!method_end) {
+        printf("[ERROR] No space after method\n");
         return -1;
     }
     
-    size_t method_len = space - request;
+    size_t method_len = method_end - request;
     if (method_len >= 15) { // Prevent buffer overflow
+        printf("[ERROR] Method too long: %zu\n", method_len);
         return -1;
     }
     strncpy(method, request, method_len);
     method[method_len] = '\0';
     
     // Extract path and query string
-    const char* path_start = space + 1;
+    const char* path_start = method_end + 1;
     const char* path_end = strchr(path_start, ' ');
     if (!path_end) {
+        printf("[ERROR] No space after path\n");
         return -1;
     }
     
+    // Check for query string
     const char* query_start = strchr(path_start, '?');
     if (query_start && query_start < path_end) {
         // Path with query string
         size_t path_len = query_start - path_start;
         if (path_len >= 255) { // Prevent buffer overflow
+            printf("[ERROR] Path too long: %zu\n", path_len);
             return -1;
         }
         strncpy(path, path_start, path_len);
         path[path_len] = '\0';
         
-        size_t query_len = path_end - query_start - 1;
+        size_t query_len = path_end - (query_start + 1);
         if (query_len >= 255) { // Prevent buffer overflow
+            printf("[ERROR] Query string too long: %zu\n", query_len);
             return -1;
         }
         strncpy(query_string, query_start + 1, query_len);
@@ -262,12 +270,16 @@ int parse_http_request(const char* request, char* method, char* path, char* quer
         // Path without query string
         size_t path_len = path_end - path_start;
         if (path_len >= 255) { // Prevent buffer overflow
+            printf("[ERROR] Path too long: %zu\n", path_len);
             return -1;
         }
         strncpy(path, path_start, path_len);
         path[path_len] = '\0';
         query_string[0] = '\0'; // Empty query string
     }
+    
+    printf("[DEBUG] Parsed request - Method: '%s', Path: '%s', Query: '%s'\n", 
+           method, path, query_string);
     
     return 0;
 }
@@ -309,10 +321,10 @@ void handle_http_request(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = (int)recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     
-    printf("[DEBUG] Received HTTP request (%d bytes): %s\n", bytes_received, buffer);
+    printf("[DEBUG] Received HTTP request (%d bytes): %.100s...\n", bytes_received, buffer);
     
     if (bytes_received <= 0) {
-        printf("[ERROR] Failed to receive data from client\n");
+        printf("[ERROR] Failed to receive data from client: %d\n", bytes_received);
         close(client_socket);
         return;
     }
@@ -323,13 +335,13 @@ void handle_http_request(int client_socket) {
     char query_string[256] = {0};
     
     if (parse_http_request(buffer, method, path, query_string) < 0) {
-        printf("[ERROR] Failed to parse HTTP request\n");
+        printf("[ERROR] Failed to parse HTTP request: %.100s...\n", buffer);
         send_http_response(client_socket, 400, "text/plain", "Bad Request");
         close(client_socket);
         return;
     }
     
-    printf("[DEBUG] Method: %s, Path: %s, Query: %s\n", method, path, query_string);
+    printf("[DEBUG] Method: '%s', Path: '%s', Query: '%s'\n", method, path, query_string);
     
     // Reject CONNECT requests (proxy requests)
     if (strcmp(method, "CONNECT") == 0) {
@@ -373,11 +385,14 @@ void handle_http_request(int client_socket) {
             
             printf("[DEBUG] Enclave call completed with status: %d, result size: %zu\n", status, result_size);
             
-            if (status != SGX_SUCCESS || result_size == 0) {
+            if (status != SGX_SUCCESS) {
                 char error_msg[100];
                 snprintf(error_msg, sizeof(error_msg), "Error: Failed to get trades. Error code: %d", status);
                 printf("[ERROR] %s\n", error_msg);
                 send_http_response(client_socket, 500, "text/plain", error_msg);
+            } else if (result_size == 0) {
+                printf("[DEBUG] No trades found, sending empty array\n");
+                send_http_response(client_socket, 200, "application/json", "[]");
             } else {
                 printf("[DEBUG] Sending all trades: %s\n", trades_json);
                 send_http_response(client_socket, 200, "application/json", trades_json);
@@ -440,7 +455,7 @@ void handle_http_request(int client_socket) {
         printf("[DEBUG] Calling enclave function ecall_add_order\n");
         sgx_status_t status = ecall_add_order(global_eid, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
         
-        printf("[DEBUG] Enclave call completed with status: %d\n", status);
+        printf("[DEBUG] Enclave call completed with status: %d, order_id: %s\n", status, order_id);
         
         if (status != SGX_SUCCESS || order_id[0] == '\0') {
             char error_msg[100];
@@ -477,7 +492,7 @@ void send_http_response(int client_socket, int status_code, const char* content_
     }
     
     char response[BUFFER_SIZE];
-    int content_length = strlen(body);
+    int content_length = (int)strlen(body);
     
     snprintf(response, BUFFER_SIZE,
              "HTTP/1.1 %d %s\r\n"
@@ -489,8 +504,15 @@ void send_http_response(int client_socket, int status_code, const char* content_
              "%s",
              status_code, status_text, content_type, content_length, body);
     
-    printf("[DEBUG] Sending response: %d %s\n", status_code, status_text);
-    send(client_socket, response, strlen(response), 0);
+    printf("[DEBUG] Sending response: %d %s, Content-Length: %d\n", 
+           status_code, status_text, content_length);
+    
+    int bytes_sent = (int)send(client_socket, response, strlen(response), 0);
+    printf("[DEBUG] Sent %d bytes\n", bytes_sent);
+    
+    if (bytes_sent < 0) {
+        printf("[ERROR] Failed to send response: %s\n", strerror(errno));
+    }
 }
 
 // Function to start HTTP server
