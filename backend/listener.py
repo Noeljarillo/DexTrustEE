@@ -391,7 +391,7 @@ def initialize_and_process_events():
     # Get the last processed block number
     last_block = get_last_processed_block()
     if last_block is None:
-        start_block = max(1, current_block - 100)
+        start_block = max(1, current_block - 10)
     else:
         start_block = last_block + 1
     
