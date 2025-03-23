@@ -52,9 +52,20 @@ enclave {
     from "TrustedLibrary/Thread.edl" import *;
 
     trusted {
-        /* Simple read/write functions */
-        public int ecall_write_number(int input_value);
-        public int ecall_read_number();
+        
+        /* Order book functions */
+        public [string] char* ecall_add_order([in, string] const char* user_address, 
+                                             int order_type, 
+                                             int order_side, 
+                                             double price, 
+                                             double quantity);
+                                             
+        public size_t ecall_get_trades([out, size=json_size] char* trades_json, 
+                                      size_t json_size);
+                                      
+        public size_t ecall_get_user_trades([in, string] const char* user_address, 
+                                           [out, size=json_size] char* trades_json, 
+                                           size_t json_size);
     };
 
     untrusted {

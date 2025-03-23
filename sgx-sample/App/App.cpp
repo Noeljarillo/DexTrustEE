@@ -212,72 +212,154 @@ void ocall_log_message(const char* message)
     }
 }
 
-// Function to parse HTTP request and extract parameters
-int parse_http_request(char* buffer, char* method, char* path, char* query_string) {
-    // Extract method
-    char* token = strtok(buffer, " ");
-    if (token == NULL) return -1;
-    strcpy(method, token);
+// Function to parse HTTP request and extract method, path, and query string
+int parse_http_request(const char* request, char* method, char* path, char* query_string) {
+    // Check for null pointers
+    if (!request || !method || !path || !query_string) {
+        return -1;
+    }
     
-    // Extract path with potential query string
-    token = strtok(NULL, " ");
-    if (token == NULL) return -1;
+    // Extract method (GET, POST, etc.)
+    char* space = strchr(request, ' ');
+    if (!space) {
+        return -1;
+    }
     
-    // Split path and query string
-    char* query_start = strchr(token, '?');
-    if (query_start) {
-        *query_start = '\0';
-        strcpy(path, token);
-        strcpy(query_string, query_start + 1);
+    size_t method_len = space - request;
+    if (method_len >= 15) { // Prevent buffer overflow
+        return -1;
+    }
+    strncpy(method, request, method_len);
+    method[method_len] = '\0';
+    
+    // Extract path and query string
+    char* path_start = space + 1;
+    char* path_end = strchr(path_start, ' ');
+    if (!path_end) {
+        return -1;
+    }
+    
+    char* query_start = strchr(path_start, '?');
+    if (query_start && query_start < path_end) {
+        // Path with query string
+        size_t path_len = query_start - path_start;
+        if (path_len >= 255) { // Prevent buffer overflow
+            return -1;
+        }
+        strncpy(path, path_start, path_len);
+        path[path_len] = '\0';
+        
+        size_t query_len = path_end - query_start - 1;
+        if (query_len >= 255) { // Prevent buffer overflow
+            return -1;
+        }
+        strncpy(query_string, query_start + 1, query_len);
+        query_string[query_len] = '\0';
     } else {
-        strcpy(path, token);
-        query_string[0] = '\0';
+        // Path without query string
+        size_t path_len = path_end - path_start;
+        if (path_len >= 255) { // Prevent buffer overflow
+            return -1;
+        }
+        strncpy(path, path_start, path_len);
+        path[path_len] = '\0';
+        query_string[0] = '\0'; // Empty query string
     }
     
     return 0;
 }
 
-// Function to extract value from query string
-int get_query_param(const char* query_string, const char* param_name, char* value, size_t value_size) {
-    char query_copy[BUFFER_SIZE];
-    strncpy(query_copy, query_string, BUFFER_SIZE - 1);
-    query_copy[BUFFER_SIZE - 1] = '\0';
-    
-    char* token = strtok(query_copy, "&");
-    while (token != NULL) {
-        char* equals = strchr(token, '=');
-        if (equals) {
-            *equals = '\0';
-            if (strcmp(token, param_name) == 0) {
-                strncpy(value, equals + 1, value_size - 1);
-                value[value_size - 1] = '\0';
-                return 0;
-            }
-        }
-        token = strtok(NULL, "&");
+// Function to extract a parameter from a query string
+int get_query_param(const char* query_string, const char* param_name, char* param_value, size_t value_size) {
+    if (!query_string || !param_name || !param_value || value_size == 0) {
+        return -1;
     }
     
-    return -1;
+    // Create param string with '=' (e.g., "user=")
+    char param_with_equals[256];
+    snprintf(param_with_equals, sizeof(param_with_equals), "%s=", param_name);
+    
+    // Find parameter in query string
+    const char* param_start = strstr(query_string, param_with_equals);
+    if (!param_start) {
+        return -1; // Parameter not found
+    }
+    
+    // Move to the value part
+    param_start += strlen(param_with_equals);
+    
+    // Find the end of the value (& or end of string)
+    const char* param_end = strchr(param_start, '&');
+    if (!param_end) {
+        param_end = param_start + strlen(param_start);
+    }
+    
+    // Calculate value length
+    size_t value_len = param_end - param_start;
+    if (value_len >= value_size) {
+        return -1; // Buffer too small
+    }
+    
+    // Copy value to output buffer
+    strncpy(param_value, param_start, value_len);
+    param_value[value_len] = '\0';
+    
+    // URL decode the value
+    // Simple URL decoding for common characters
+    char* dst = param_value;
+    char* src = param_value;
+    while (*src) {
+        if (*src == '%' && isxdigit(src[1]) && isxdigit(src[2])) {
+            // Convert hex to char
+            char hex[3] = {src[1], src[2], '\0'};
+            *dst = (char)strtol(hex, NULL, 16);
+            src += 3;
+        } else if (*src == '+') {
+            *dst = ' ';
+            src++;
+        } else {
+            *dst = *src;
+            src++;
+        }
+        dst++;
+    }
+    *dst = '\0';
+    
+    return 0;
 }
 
 // Function to send HTTP response
 void send_http_response(int client_socket, int status_code, const char* content_type, const char* body) {
-    char response[BUFFER_SIZE];
-    const char* status_text = (status_code == 200) ? "OK" : "Bad Request";
+    char response[BUFFER_SIZE * 10] = {0}; // Larger buffer for response
     
-    snprintf(response, BUFFER_SIZE,
+    // Determine status text
+    const char* status_text = "OK";
+    if (status_code == 400) status_text = "Bad Request";
+    else if (status_code == 404) status_text = "Not Found";
+    else if (status_code == 500) status_text = "Internal Server Error";
+    
+    // Calculate content length
+    size_t content_length = strlen(body);
+    
+    // Format HTTP response
+    snprintf(response, sizeof(response),
              "HTTP/1.1 %d %s\r\n"
              "Content-Type: %s\r\n"
              "Content-Length: %zu\r\n"
              "Connection: close\r\n"
+             "Access-Control-Allow-Origin: *\r\n"
              "\r\n"
              "%s",
-             status_code, status_text, content_type, strlen(body), body);
+             status_code, status_text,
+             content_type,
+             content_length,
+             body);
     
+    // Send response
     send(client_socket, response, strlen(response), 0);
 }
 
-// Function to handle HTTP requests
+// Function to handle HTTP requests for the order book
 void handle_http_request(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
     int bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
@@ -298,8 +380,99 @@ void handle_http_request(int client_socket) {
         return;
     }
     
-    // Handle GET request to read number
-    if (strcmp(method, "GET") == 0 && strcmp(path, "/read") == 0) {
+    // Handle GET request to read trades
+    if (strcmp(method, "GET") == 0 && strcmp(path, "/trades") == 0) {
+        char trades_json[10240] = {0}; // Large buffer for trades
+        size_t json_size = sizeof(trades_json);
+        
+        // Check if user address is provided
+        char user_address[64] = {0};
+        size_t result_size = 0;
+        
+        if (get_query_param(query_string, "user", user_address, sizeof(user_address)) == 0) {
+            // Get trades for specific user
+            sgx_status_t status = ecall_get_user_trades(global_eid, &result_size, user_address, trades_json, json_size);
+            
+            if (status != SGX_SUCCESS || result_size == 0) {
+                char error_msg[100];
+                snprintf(error_msg, sizeof(error_msg), "Error: Failed to get user trades. Error code: %d", status);
+                send_http_response(client_socket, 500, "text/plain", error_msg);
+            } else {
+                send_http_response(client_socket, 200, "application/json", trades_json);
+            }
+        } else {
+            // Get all trades
+            sgx_status_t status = ecall_get_trades(global_eid, &result_size, trades_json, json_size);
+            
+            if (status != SGX_SUCCESS || result_size == 0) {
+                char error_msg[100];
+                snprintf(error_msg, sizeof(error_msg), "Error: Failed to get trades. Error code: %d", status);
+                send_http_response(client_socket, 500, "text/plain", error_msg);
+            } else {
+                send_http_response(client_socket, 200, "application/json", trades_json);
+            }
+        }
+    }
+    // Handle POST request to add order
+    else if (strcmp(method, "POST") == 0 && strcmp(path, "/order") == 0) {
+        // Extract parameters from query string
+        char user_address[64] = {0};
+        char type_str[16] = {0};
+        char side_str[16] = {0};
+        char price_str[32] = {0};
+        char quantity_str[32] = {0};
+        
+        // Check required parameters
+        if (get_query_param(query_string, "user", user_address, sizeof(user_address)) < 0 ||
+            get_query_param(query_string, "type", type_str, sizeof(type_str)) < 0 ||
+            get_query_param(query_string, "side", side_str, sizeof(side_str)) < 0 ||
+            get_query_param(query_string, "quantity", quantity_str, sizeof(quantity_str)) < 0) {
+            
+            send_http_response(client_socket, 400, "text/plain", "Missing required parameters (user, type, side, quantity)");
+            close(client_socket);
+            return;
+        }
+        
+        // For market orders, price is optional
+        int order_type = (strcmp(type_str, "market") == 0) ? 1 : 0; // 0=LIMIT, 1=MARKET
+        
+        if (order_type == 0 && get_query_param(query_string, "price", price_str, sizeof(price_str)) < 0) {
+            send_http_response(client_socket, 400, "text/plain", "Price is required for limit orders");
+            close(client_socket);
+            return;
+        }
+        
+        // Convert parameters
+        int order_side = (strcmp(side_str, "buy") == 0) ? 0 : 1; // 0=BUY, 1=SELL
+        double price = (order_type == 1) ? 0.0 : atof(price_str);
+        double quantity = atof(quantity_str);
+        
+        // Validate Ethereum address (simple check)
+        if (strlen(user_address) < 40) {
+            send_http_response(client_socket, 400, "text/plain", "Invalid Ethereum address");
+            close(client_socket);
+            return;
+        }
+        
+        // Add order to the book
+        char* order_id = NULL;
+        sgx_status_t status = ecall_add_order(global_eid, &order_id, user_address, order_type, order_side, price, quantity);
+        
+        if (status != SGX_SUCCESS || order_id == NULL) {
+            char error_msg[100];
+            snprintf(error_msg, sizeof(error_msg), "Error: Failed to add order. Error code: %d", status);
+            send_http_response(client_socket, 500, "text/plain", error_msg);
+        } else {
+            char response_body[256];
+            snprintf(response_body, sizeof(response_body), "{\"order_id\": \"%s\"}", order_id);
+            send_http_response(client_socket, 200, "application/json", response_body);
+            
+            // Free the allocated string
+            free(order_id);
+        }
+    }
+    // Handle legacy endpoints for backward compatibility
+    else if (strcmp(method, "GET") == 0 && strcmp(path, "/read") == 0) {
         int result = 0;
         sgx_status_t status = ecall_read_number(global_eid, &result);
         
@@ -313,7 +486,6 @@ void handle_http_request(int client_socket) {
             send_http_response(client_socket, 200, "application/json", response_body);
         }
     }
-    // Handle POST request to write number
     else if (strcmp(method, "POST") == 0 && strcmp(path, "/write") == 0) {
         // Extract value parameter from query string
         char value_str[32] = {0};
@@ -361,7 +533,7 @@ void start_http_server() {
     }
     
     // Set socket options
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("Setsockopt failed");
         exit(EXIT_FAILURE);
     }
@@ -371,7 +543,7 @@ void start_http_server() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(HTTP_PORT);
     
-    // Bind socket to address
+    // Bind socket to port
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("Bind failed");
         exit(EXIT_FAILURE);
@@ -391,8 +563,7 @@ void start_http_server() {
     // Main server loop
     while (keep_running) {
         // Accept connection
-        client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-        if (client_socket < 0) {
+        if ((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
             if (keep_running) {
                 perror("Accept failed");
             }
@@ -414,12 +585,10 @@ int SGX_CDECL main(int argc, char *argv[])
     (void)(argc);
     (void)(argv);
 
-
     /* Initialize the enclave */
     if(initialize_enclave() < 0){
-        printf("Enter a character before exit ...\n");
-        getchar();
-        return -1; 
+        printf("Error: enclave initialization failed\n");
+        return -1;
     }
  
     /* Utilize edger8r attributes */
@@ -434,20 +603,21 @@ int SGX_CDECL main(int argc, char *argv[])
     ecall_thread_functions();
 
     /* Start HTTP server */
-    printf("\n--- Starting HTTP Server for Enclave Access ---\n");
+    printf("\n--- Starting HTTP Server for Order Book Access ---\n");
     printf("Available endpoints:\n");
-    printf("  GET  /read           - Read value from enclave\n");
-    printf("  POST /write?value=X  - Write value X to enclave\n\n");
-    
-    start_http_server();
+    printf("  GET  /trades           - Get all trades\n");
+    printf("  GET  /trades?user=X    - Get trades for user X\n");
+    printf("  POST /order?user=X&type=Y&side=Z&price=P&quantity=Q - Add order\n");
+    printf("    where: type = 'limit' or 'market'\n");
+    printf("           side = 'buy' or 'sell'\n");
+    printf("  GET  /read             - Read value from enclave (legacy)\n");
+    printf("  POST /write?value=X    - Write value X to enclave (legacy)\n\n");
 
+    start_http_server();
+    
     /* Destroy the enclave */
     sgx_destroy_enclave(global_eid);
     
-    printf("Info: SampleEnclave successfully returned.\n");
-
-    printf("Enter a character before exit ...\n");
-    getchar();
     return 0;
 }
 

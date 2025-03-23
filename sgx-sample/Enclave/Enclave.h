@@ -41,11 +41,10 @@ extern "C" {
 
 int printf(const char* fmt, ...);
 
-// Function to write a number to the enclave (adds 1 to the input)
-int ecall_write_number(int input_value);
-
-// Function to read the stored number from the enclave
-int ecall_read_number();
+// Order book functions
+char* ecall_add_order(const char* user_address, int order_type, int order_side, double price, double quantity);
+size_t ecall_get_trades(char* trades_json, size_t json_size);
+size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t json_size);
 
 #if defined(__cplusplus)
 }
