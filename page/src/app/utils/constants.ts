@@ -16,10 +16,21 @@ export const ORDER_TYPES = {
 // Market codes
 export const MARKET_CODES = {
   ETH_USDT: "ETH-USDT",
-  BTC_USDT: "BTC-USDT"
+  BTC_USDT: "BTC-USDT",
+  SOL_USDT: "SOL-USDT",
+  AVAX_USDT: "AVAX-USDT",
+  ARB_USDT: "ARB-USDT",
+  ETH_FAKE: "ETH-FAKE"
 };
 
 // Chain IDs
 export const CHAIN_IDS = {
   SEPOLIA: 11155111
+};
+
+// Market categories
+export const MARKET_CATEGORIES = {
+  ALL: 'all',
+  DEFI: 'defi',
+  LAYER1: 'layer1'
 }; 
