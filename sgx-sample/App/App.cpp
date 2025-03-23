@@ -382,28 +382,40 @@ void handle_http_request(int client_socket) {
         
         if (get_query_param(query_string, "user", user_address, sizeof(user_address)) == 0) {
             // Get trades for specific user
+            printf("[DEBUG] Getting trades for user: %s\n", user_address);
             sgx_status_t status = ecall_get_user_trades(global_eid, &result_size, user_address, trades_json, json_size);
+            
+            printf("[DEBUG] Enclave call completed with status: %d, result size: %zu\n", status, result_size);
             
             if (status != SGX_SUCCESS) {
                 char error_msg[100];
                 snprintf(error_msg, sizeof(error_msg), "Error: Failed to get user trades. Error code: %d", status);
+                printf("[ERROR] %s\n", error_msg);
                 send_http_response(client_socket, 500, "text/plain", error_msg);
             } else if (result_size == 0) {
+                printf("[DEBUG] No user trades found, sending empty array\n");
                 send_http_response(client_socket, 200, "application/json", "[]");
             } else {
+                printf("[DEBUG] Sending user trades: %s\n", trades_json);
                 send_http_response(client_socket, 200, "application/json", trades_json);
             }
         } else {
             // Get all trades
+            printf("[DEBUG] Getting all trades\n");
             sgx_status_t status = ecall_get_trades(global_eid, &result_size, trades_json, json_size);
+            
+            printf("[DEBUG] Enclave call completed with status: %d, result size: %zu\n", status, result_size);
             
             if (status != SGX_SUCCESS) {
                 char error_msg[100];
                 snprintf(error_msg, sizeof(error_msg), "Error: Failed to get trades. Error code: %d", status);
+                printf("[ERROR] %s\n", error_msg);
                 send_http_response(client_socket, 500, "text/plain", error_msg);
             } else if (result_size == 0) {
+                printf("[DEBUG] No trades found, sending empty array\n");
                 send_http_response(client_socket, 200, "application/json", "[]");
             } else {
+                printf("[DEBUG] Sending all trades: %s\n", trades_json);
                 send_http_response(client_socket, 200, "application/json", trades_json);
             }
         }
