@@ -40,115 +40,98 @@ private:
     
     // Match a market order
     void match_market_order(Order& order) {
-        auto& opposite_orders = (order.side == BUY) ? sell_orders : buy_orders;
-        
-        while (order.remaining_quantity > 0 && !opposite_orders.empty()) {
-            Order matching_order = opposite_orders.top();
-            opposite_orders.pop();
-            
-            if (matching_order.status != OPEN) {
-                continue;
-            }
-            
-            double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
-            
-            Trade trade;
-            trade.id = generate_trade_id();
-            trade.price = matching_order.price;
-            trade.quantity = fill_quantity;
-            ocall_get_current_time(&trade.timestamp);
-            
-            if (order.side == BUY) {
+        if (order.side == BUY) {
+            // For buy orders, match against sell orders
+            while (order.remaining_quantity > 0 && !sell_orders.empty()) {
+                // Get the best matching order
+                Order matching_order = sell_orders.top();
+                sell_orders.pop();
+                
+                // Skip orders that are not open
+                if (matching_order.status != OPEN) {
+                    continue;
+                }
+                
+                // Calculate fill quantity
+                double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
+                
+                // Create trade
+                Trade trade;
+                trade.id = generate_trade_id();
+                trade.price = matching_order.price;
+                trade.quantity = fill_quantity;
+                ocall_get_current_time(&trade.timestamp);
+                
                 trade.taker_address = order.user_address;
                 trade.maker_address = matching_order.user_address;
                 trade.taker_side = BUY;
-            } else {
-                trade.taker_address = order.user_address;
-                trade.maker_address = matching_order.user_address;
-                trade.taker_side = SELL;
+                
+                // Update order quantities
+                order.remaining_quantity -= fill_quantity;
+                matching_order.remaining_quantity -= fill_quantity;
+                
+                // Update order statuses
+                if (matching_order.remaining_quantity <= 0) {
+                    matching_order.status = FILLED;
+                } else {
+                    matching_order.status = PARTIALLY_FILLED;
+                    sell_orders.push(matching_order);
+                }
+                
+                // Update the order in the map
+                orders[matching_order.id] = matching_order;
+                
+                trades.push_back(trade);
+                
+                printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
+                       trade.id.c_str(), trade.price, trade.quantity);
             }
-            
-            // Update order quantities
-            order.remaining_quantity -= fill_quantity;
-            matching_order.remaining_quantity -= fill_quantity;
-            
-            // Update order statuses
-            if (matching_order.remaining_quantity <= 0) {
-                matching_order.status = FILLED;
-            } else {
-                matching_order.status = PARTIALLY_FILLED;
-                opposite_orders.push(matching_order);
-            }
-            
-            orders[matching_order.id] = matching_order;
-            
-            trades.push_back(trade);
-            
-            printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
-                   trade.id.c_str(), trade.price, trade.quantity);
-        }
-        
-        if (order.remaining_quantity <= 0) {
-            order.status = FILLED;
         } else {
-            order.status = PARTIALLY_FILLED;
-        }
-        
-        orders[order.id] = order;
-    }
-    
-    // Match a limit order
-    void match_limit_order(Order& order) {
-        auto& opposite_orders = (order.side == BUY) ? sell_orders : buy_orders;
-        
-        while (order.remaining_quantity > 0 && !opposite_orders.empty()) {
-            Order matching_order = opposite_orders.top();
-            
-            if ((order.side == BUY && matching_order.price > order.price) ||
-                (order.side == SELL && matching_order.price < order.price)) {
-                break;
-            }
-            
-            opposite_orders.pop();
-            
-            if (matching_order.status != OPEN) {
-                continue;
-            }
-            
-            double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
-            
-            Trade trade;
-            trade.id = generate_trade_id();
-            trade.price = matching_order.price;
-            trade.quantity = fill_quantity;
-            ocall_get_current_time(&trade.timestamp);
-            
-            if (order.side == BUY) {
-                trade.taker_address = order.user_address;
-                trade.maker_address = matching_order.user_address;
-                trade.taker_side = BUY;
-            } else {
+            // For sell orders, match against buy orders
+            while (order.remaining_quantity > 0 && !buy_orders.empty()) {
+                // Get the best matching order
+                Order matching_order = buy_orders.top();
+                buy_orders.pop();
+                
+                // Skip orders that are not open
+                if (matching_order.status != OPEN) {
+                    continue;
+                }
+                
+                // Calculate fill quantity
+                double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
+                
+                // Create trade
+                Trade trade;
+                trade.id = generate_trade_id();
+                trade.price = matching_order.price;
+                trade.quantity = fill_quantity;
+                ocall_get_current_time(&trade.timestamp);
+                
                 trade.taker_address = order.user_address;
                 trade.maker_address = matching_order.user_address;
                 trade.taker_side = SELL;
+                
+                // Update order quantities
+                order.remaining_quantity -= fill_quantity;
+                matching_order.remaining_quantity -= fill_quantity;
+                
+                // Update order statuses
+                if (matching_order.remaining_quantity <= 0) {
+                    matching_order.status = FILLED;
+                } else {
+                    matching_order.status = PARTIALLY_FILLED;
+                    buy_orders.push(matching_order);
+                }
+                
+                // Update the order in the map
+                orders[matching_order.id] = matching_order;
+                
+                trades.push_back(trade);
+                
+                printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
+                       trade.id.c_str(), trade.price, trade.quantity);
             }
-            
-            order.remaining_quantity -= fill_quantity;
-            matching_order.remaining_quantity -= fill_quantity;
-            
-            if (matching_order.remaining_quantity <= 0) {
-                matching_order.status = FILLED;
-            } else {
-                matching_order.status = PARTIALLY_FILLED;
-                opposite_orders.push(matching_order);
-            }
-            
-            orders[matching_order.id] = matching_order;
-            
-            trades.push_back(trade);
-            
-            printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
-                   trade.id.c_str(), trade.price, trade.quantity);
         }
         
         if (order.remaining_quantity <= 0) {
@@ -161,6 +144,128 @@ private:
                 sell_orders.push(order);
             }
         } else {
+            if (order.side == BUY) {
+                buy_orders.push(order);
+            } else {
+                sell_orders.push(order);
+            }
+        }
+        
+        orders[order.id] = order;
+    }
+    
+    // Match a limit order
+    void match_limit_order(Order& order) {
+        if (order.side == BUY) {
+            // For buy orders, match against sell orders
+            while (order.remaining_quantity > 0 && !sell_orders.empty()) {
+                // Get the best matching order
+                Order matching_order = sell_orders.top();
+                
+                // Check if the price is acceptable
+                if (matching_order.price > order.price) {
+                    break; // No more matching orders at acceptable price
+                }
+                
+                sell_orders.pop();
+                
+                // Skip orders that are not open
+                if (matching_order.status != OPEN) {
+                    continue;
+                }
+                
+                // Calculate fill quantity
+                double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
+                
+                // Create trade
+                Trade trade;
+                trade.id = generate_trade_id();
+                trade.price = matching_order.price;
+                trade.quantity = fill_quantity;
+                ocall_get_current_time(&trade.timestamp);
+                
+                trade.taker_address = order.user_address;
+                trade.maker_address = matching_order.user_address;
+                trade.taker_side = BUY;
+                
+                // Update order quantities
+                order.remaining_quantity -= fill_quantity;
+                matching_order.remaining_quantity -= fill_quantity;
+                
+                // Update order statuses
+                if (matching_order.remaining_quantity <= 0) {
+                    matching_order.status = FILLED;
+                } else {
+                    matching_order.status = PARTIALLY_FILLED;
+                    sell_orders.push(matching_order);
+                }
+                
+                // Update the order in the map
+                orders[matching_order.id] = matching_order;
+                
+                trades.push_back(trade);
+                
+                printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
+                       trade.id.c_str(), trade.price, trade.quantity);
+            }
+        } else {
+            // For sell orders, match against buy orders
+            while (order.remaining_quantity > 0 && !buy_orders.empty()) {
+                // Get the best matching order
+                Order matching_order = buy_orders.top();
+                
+                // Check if the price is acceptable
+                if (matching_order.price < order.price) {
+                    break; // No more matching orders at acceptable price
+                }
+                
+                buy_orders.pop();
+                
+                // Skip orders that are not open
+                if (matching_order.status != OPEN) {
+                    continue;
+                }
+                
+                // Calculate fill quantity
+                double fill_quantity = std::min(order.remaining_quantity, matching_order.remaining_quantity);
+                
+                // Create trade
+                Trade trade;
+                trade.id = generate_trade_id();
+                trade.price = matching_order.price;
+                trade.quantity = fill_quantity;
+                ocall_get_current_time(&trade.timestamp);
+                
+                trade.taker_address = order.user_address;
+                trade.maker_address = matching_order.user_address;
+                trade.taker_side = SELL;
+                
+                // Update order quantities
+                order.remaining_quantity -= fill_quantity;
+                matching_order.remaining_quantity -= fill_quantity;
+                
+                // Update order statuses
+                if (matching_order.remaining_quantity <= 0) {
+                    matching_order.status = FILLED;
+                } else {
+                    matching_order.status = PARTIALLY_FILLED;
+                    buy_orders.push(matching_order);
+                }
+                
+                // Update the order in the map
+                orders[matching_order.id] = matching_order;
+                
+                trades.push_back(trade);
+                
+                printf("[Enclave] Trade executed: %s, Price: %.2f, Quantity: %.2f\n", 
+                       trade.id.c_str(), trade.price, trade.quantity);
+            }
+        }
+        
+        if (order.remaining_quantity <= 0) {
+            order.status = FILLED;
+        } else {
+            order.status = OPEN;
             if (order.side == BUY) {
                 buy_orders.push(order);
             } else {
@@ -210,16 +315,43 @@ public:
         }
         return user_trades;
     }
-};
 
-static OrderBookImpl* order_book_instance = nullptr;
-
-OrderBookImpl* get_order_book() {
-    if (order_book_instance == nullptr) {
-        order_book_instance = new OrderBookImpl();
+    // Convert trades to JSON
+    std::string trades_to_json(const std::vector<Trade>& trades_list) {
+        std::stringstream ss;
+        ss << "[";
+        bool first = true;
+        for (const auto& trade : trades_list) {
+            if (!first) {
+                ss << ",";
+            }
+            first = false;
+            
+            ss << "{";
+            ss << "\"id\":\"" << trade.id << "\",";
+            ss << "\"maker\":\"" << trade.maker_address << "\",";
+            ss << "\"taker\":\"" << trade.taker_address << "\",";
+            ss << "\"taker_side\":" << (trade.taker_side == BUY ? "\"buy\"" : "\"sell\"") << ",";
+            ss << "\"price\":" << trade.price << ",";
+            ss << "\"quantity\":" << trade.quantity << ",";
+            ss << "\"timestamp\":" << trade.timestamp;
+            ss << "}";
+        }
+        ss << "]";
+        return ss.str();
     }
-    return order_book_instance;
-}
+
+    // Singleton instance
+    static OrderBookImpl* instance = nullptr;
+
+    // Get singleton instance
+    static OrderBookImpl* getInstance() {
+        if (instance == nullptr) {
+            instance = new OrderBookImpl();
+        }
+        return instance;
+    }
+};
 
 // Add an order to the book
 void ecall_add_order(const char* user_address, int order_type, 
@@ -229,7 +361,7 @@ void ecall_add_order(const char* user_address, int order_type,
     OrderType type = static_cast<OrderType>(order_type);
     OrderSide side = static_cast<OrderSide>(order_side);
     
-    std::string result = get_order_book()->add_order(address, type, side, price, quantity);
+    std::string result = OrderBookImpl::getInstance()->add_order(address, type, side, price, quantity);
     
     // Copy the order ID to the output buffer
     if (result.length() < id_size) {
@@ -241,68 +373,34 @@ void ecall_add_order(const char* user_address, int order_type,
     }
 }
 
+// Get all trades
 size_t ecall_get_trades(char* trades_json, size_t json_size) {
-    auto trades = get_order_book()->get_trades();
+    std::vector<Trade> all_trades = OrderBookImpl::getInstance()->get_trades();
+    std::string json_str = OrderBookImpl::getInstance()->trades_to_json(all_trades);
     
-    std::stringstream json;
-    json << "[";
-    for (size_t i = 0; i < trades.size(); i++) {
-        const auto& trade = trades[i];
-        json << "{";
-        json << "\"id\":\"" << trade.id << "\",";
-        json << "\"maker\":\"" << trade.maker_address << "\",";
-        json << "\"taker\":\"" << trade.taker_address << "\",";
-        json << "\"side\":" << trade.taker_side << ",";
-        json << "\"price\":" << std::fixed << std::setprecision(2) << trade.price << ",";
-        json << "\"quantity\":" << std::fixed << std::setprecision(2) << trade.quantity << ",";
-        json << "\"timestamp\":" << trade.timestamp;
-        json << "}";
-        if (i < trades.size() - 1) {
-            json << ",";
-        }
-    }
-    json << "]";
-    
-    std::string json_str = json.str();
-    
+    // Check if buffer is large enough
     if (json_str.length() >= json_size) {
-        return 0;
+        return 0; // Buffer too small
     }
     
+    // Copy to output buffer
     memcpy(trades_json, json_str.c_str(), json_str.length() + 1);
     
     return json_str.length();
 }
 
+// Get trades for a specific user
 size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t json_size) {
     std::string address(user_address);
-    auto trades = get_order_book()->get_user_trades(address);
+    std::vector<Trade> user_trades = OrderBookImpl::getInstance()->get_user_trades(address);
+    std::string json_str = OrderBookImpl::getInstance()->trades_to_json(user_trades);
     
-    std::stringstream json;
-    json << "[";
-    for (size_t i = 0; i < trades.size(); i++) {
-        const auto& trade = trades[i];
-        json << "{";
-        json << "\"id\":\"" << trade.id << "\",";
-        json << "\"maker\":\"" << trade.maker_address << "\",";
-        json << "\"taker\":\"" << trade.taker_address << "\",";
-        json << "\"side\":" << trade.taker_side << ",";
-        json << "\"price\":" << std::fixed << std::setprecision(2) << trade.price << ",";
-        json << "\"quantity\":" << std::fixed << std::setprecision(2) << trade.quantity << ",";
-        json << "\"timestamp\":" << trade.timestamp;
-        json << "}";
-        if (i < trades.size() - 1) {
-            json << ",";
-        }
-    }
-    json << "]";
-    
-    std::string json_str = json.str();
-    
+    // Check if buffer is large enough
     if (json_str.length() >= json_size) {
-        return 0;
+        return 0; // Buffer too small
     }
     
+    // Copy to output buffer
     memcpy(trades_json, json_str.c_str(), json_str.length() + 1);
     
     return json_str.length();

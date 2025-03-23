@@ -45,7 +45,7 @@
 
 #define MAX_PATH FILENAME_MAX
 #define HTTP_PORT 8080
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 #include "sgx_urts.h"
 #include "App.h"
@@ -270,61 +270,34 @@ int parse_http_request(const char* request, char* method, char* path, char* quer
     return 0;
 }
 
-// Function to extract a parameter from a query string
-int get_query_param(const char* query_string, const char* param_name, char* param_value, size_t value_size) {
-    if (!query_string || !param_name || !param_value || value_size == 0) {
+// Function to get query parameter value
+int get_query_param(const char* query_string, const char* param_name, char* value, size_t value_size) {
+    if (!query_string || !param_name || !value) {
         return -1;
     }
     
-    // Create param string with '=' (e.g., "user=")
-    char param_with_equals[256];
-    snprintf(param_with_equals, sizeof(param_with_equals), "%s=", param_name);
+    char param_prefix[256];
+    snprintf(param_prefix, sizeof(param_prefix), "%s=", param_name);
     
-    // Find parameter in query string
-    const char* param_start = strstr(query_string, param_with_equals);
+    const char* param_start = strstr(query_string, param_prefix);
     if (!param_start) {
-        return -1; // Parameter not found
+        return -1;
     }
     
-    // Move to the value part
-    param_start += strlen(param_with_equals);
+    param_start += strlen(param_prefix);
     
-    // Find the end of the value (& or end of string)
     const char* param_end = strchr(param_start, '&');
     if (!param_end) {
         param_end = param_start + strlen(param_start);
     }
     
-    // Calculate value length
-    size_t value_len = param_end - param_start;
-    if (value_len >= value_size) {
-        return -1; // Buffer too small
+    size_t param_len = param_end - param_start;
+    if (param_len >= value_size) {
+        return -1;
     }
     
-    // Copy value to output buffer
-    strncpy(param_value, param_start, value_len);
-    param_value[value_len] = '\0';
-    
-    // URL decode the value
-    // Simple URL decoding for common characters
-    char* dst = param_value;
-    char* src = param_value;
-    while (*src) {
-        if (*src == '%' && isxdigit(src[1]) && isxdigit(src[2])) {
-            // Convert hex to char
-            char hex[3] = {src[1], src[2], '\0'};
-            *dst = (char)strtol(hex, NULL, 16);
-            src += 3;
-        } else if (*src == '+') {
-            *dst = ' ';
-            src++;
-        } else {
-            *dst = *src;
-            src++;
-        }
-        dst++;
-    }
-    *dst = '\0';
+    strncpy(value, param_start, param_len);
+    value[param_len] = '\0';
     
     return 0;
 }
