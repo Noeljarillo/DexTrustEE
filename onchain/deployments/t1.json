@@ -1,0 +1,7 @@
+{
+  "network": "t1",
+  "deployer": "0x790d325cC1f319620aDdd1be1B78924AB1D18311",
+  "testToken": "0x9aef04b695eBfC430C886903b4Bbf1Bfe7C96fD5",
+  "orderHandler": "0x934F38B0B492d77bdD4d2e5800476e514fe89437",
+  "deploymentTime": "2025-03-23T11:05:15.042Z"
+}

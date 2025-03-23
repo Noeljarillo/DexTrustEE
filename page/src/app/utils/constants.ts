@@ -33,4 +33,16 @@ export const MARKET_CATEGORIES = {
   ALL: 'all',
   DEFI: 'defi',
   LAYER1: 'layer1'
+};
+
+// Etherscan URLs
+export const ETHERSCAN_URLS = {
+  SEPOLIA: 'https://sepolia.etherscan.io'
+};
+
+// Helper function to create Etherscan transaction link
+export const getEtherscanTxLink = (txHash: string, chainId: number = CHAIN_IDS.SEPOLIA): string => {
+  // Default to Sepolia
+  const baseUrl = ETHERSCAN_URLS.SEPOLIA;
+  return `${baseUrl}/tx/${txHash}`;
 }; 
