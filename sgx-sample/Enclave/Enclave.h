@@ -46,6 +46,7 @@ void ecall_add_order(const char* user_address, int order_type, int order_side,
                     double price, double quantity, char* order_id, size_t id_size);
 size_t ecall_get_trades(char* trades_json, size_t json_size);
 size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t json_size);
+void ecall_clear_order_book();
 
 #if defined(__cplusplus)
 }

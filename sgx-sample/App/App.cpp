@@ -420,6 +420,20 @@ void handle_http_request(int client_socket) {
             }
         }
     }
+    // Handle clear request
+    else if (strcmp(path, "/clear") == 0 && strcmp(method, "POST") == 0) {
+        printf("[DEBUG] Clearing order book\n");
+        
+        sgx_status_t status = ecall_clear_order_book(global_eid);
+        
+        if (status != SGX_SUCCESS) {
+            char error_msg[100];
+            snprintf(error_msg, sizeof(error_msg), "Error: Failed to clear order book. Error code: %d", status);
+            send_http_response(client_socket, 500, "text/plain", error_msg);
+        } else {
+            send_http_response(client_socket, 200, "application/json", "{\"status\":\"success\",\"message\":\"Order book cleared\"}");
+        }
+    }
     // Handle unknown requests
     else {
         send_http_response(client_socket, 404, "text/plain", "Not Found");

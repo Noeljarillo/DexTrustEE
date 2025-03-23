@@ -68,6 +68,8 @@ enclave {
         public size_t ecall_get_user_trades([in, string] const char* user_address, 
                                            [out, size=json_size] char* trades_json, 
                                            size_t json_size);
+
+        public void ecall_clear_order_book();
     };
 
     untrusted {

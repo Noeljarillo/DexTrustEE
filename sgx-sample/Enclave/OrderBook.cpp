@@ -371,6 +371,28 @@ public:
         result += "]";
         return result;
     }
+
+    // Clear all orders and trades
+    void clear_all_data() {
+        printf("[Enclave] Clearing all orders and trades\n");
+        
+        // Clear the priority queues
+        while (!buy_orders.empty()) {
+            buy_orders.pop();
+        }
+        
+        while (!sell_orders.empty()) {
+            sell_orders.pop();
+        }
+        
+        // Clear the orders map
+        orders.clear();
+        
+        // Clear the trades vector
+        trades.clear();
+        
+        printf("[Enclave] All orders and trades have been cleared\n");
+    }
 };
 
 // Initialize the static member outside the class
@@ -457,4 +479,9 @@ size_t ecall_get_user_trades(const char* user_address, char* trades_json, size_t
     memcpy(trades_json, json_str.c_str(), json_str.length() + 1);
     
     return json_str.length();
+}
+
+// Clear all orders and trades
+void ecall_clear_order_book() {
+    get_order_book()->clear_all_data();
 }
