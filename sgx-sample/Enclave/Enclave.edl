@@ -33,7 +33,6 @@
 
 enclave {
     
-    include "OrderTypes.h"
     include "user_types.h"
 
     /* Import ECALL/OCALL from sub-directory EDLs.
@@ -52,18 +51,6 @@ enclave {
     from "TrustedLibrary/Thread.edl" import *;
 
     trusted {
-        /* Orderbook functions */
-        public uint64_t ecall_add_order([in] const order_t* order);
-        public uint64_t ecall_cancel_order(uint64_t order_id);
-        public int ecall_get_matches([out, count=max_matches] match_t* matches, size_t max_matches);
-        public int ecall_get_order_status(uint64_t order_id, [out] order_status_t* status);
-        public int ecall_get_orderbook_depth([in, string] const char* symbol, 
-                                            [out, count=max_levels] double* bid_prices, 
-                                            [out, count=max_levels] double* bid_quantities,
-                                            [out, count=max_levels] double* ask_prices,
-                                            [out, count=max_levels] double* ask_quantities,
-                                            size_t max_levels);
-                                            
         /* Simple read/write functions */
         public int ecall_write_number(int input_value);
         public int ecall_read_number();
