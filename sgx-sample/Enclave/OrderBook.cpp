@@ -221,15 +221,24 @@ OrderBookImpl* get_order_book() {
     return order_book_instance;
 }
 
-std::string ecall_add_order(const char* user_address, int order_type, 
-                           int order_side, double price, double quantity) {
+// Add an order to the book
+void ecall_add_order(const char* user_address, int order_type, 
+                    int order_side, double price, double quantity,
+                    char* order_id, size_t id_size) {
     std::string address(user_address);
     OrderType type = static_cast<OrderType>(order_type);
     OrderSide side = static_cast<OrderSide>(order_side);
     
-    std::string order_id = get_order_book()->add_order(address, type, side, price, quantity);
+    std::string result = get_order_book()->add_order(address, type, side, price, quantity);
     
-    return order_id;
+    // Copy the order ID to the output buffer
+    if (result.length() < id_size) {
+        strncpy(order_id, result.c_str(), result.length() + 1);
+    } else {
+        // Buffer too small, truncate
+        strncpy(order_id, result.c_str(), id_size - 1);
+        order_id[id_size - 1] = '\0';
+    }
 }
 
 size_t ecall_get_trades(char* trades_json, size_t json_size) {

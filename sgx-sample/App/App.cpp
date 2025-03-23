@@ -59,6 +59,7 @@ volatile sig_atomic_t keep_running = 1;
 
 // Signal handler for graceful shutdown
 void handle_signal(int sig) {
+    (void)sig; // Suppress unused parameter warning
     keep_running = 0;
 }
 
@@ -220,7 +221,7 @@ int parse_http_request(const char* request, char* method, char* path, char* quer
     }
     
     // Extract method (GET, POST, etc.)
-    char* space = strchr(request, ' ');
+    const char* space = strchr(request, ' ');
     if (!space) {
         return -1;
     }
@@ -233,13 +234,13 @@ int parse_http_request(const char* request, char* method, char* path, char* quer
     method[method_len] = '\0';
     
     // Extract path and query string
-    char* path_start = space + 1;
-    char* path_end = strchr(path_start, ' ');
+    const char* path_start = space + 1;
+    const char* path_end = strchr(path_start, ' ');
     if (!path_end) {
         return -1;
     }
     
-    char* query_start = strchr(path_start, '?');
+    const char* query_start = strchr(path_start, '?');
     if (query_start && query_start < path_end) {
         // Path with query string
         size_t path_len = query_start - path_start;
@@ -362,7 +363,7 @@ void send_http_response(int client_socket, int status_code, const char* content_
 // Function to handle HTTP requests for the order book
 void handle_http_request(int client_socket) {
     char buffer[BUFFER_SIZE] = {0};
-    int bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+    int bytes_received = (int)recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
     
     if (bytes_received <= 0) {
         close(client_socket);
@@ -455,59 +456,16 @@ void handle_http_request(int client_socket) {
         }
         
         // Add order to the book
-        char* order_id = NULL;
-        sgx_status_t status = ecall_add_order(global_eid, &order_id, user_address, order_type, order_side, price, quantity);
+        char order_id[64] = {0};
+        sgx_status_t status = ecall_add_order(global_eid, user_address, order_type, order_side, price, quantity, order_id, sizeof(order_id));
         
-        if (status != SGX_SUCCESS || order_id == NULL) {
+        if (status != SGX_SUCCESS || order_id[0] == '\0') {
             char error_msg[100];
             snprintf(error_msg, sizeof(error_msg), "Error: Failed to add order. Error code: %d", status);
             send_http_response(client_socket, 500, "text/plain", error_msg);
         } else {
             char response_body[256];
             snprintf(response_body, sizeof(response_body), "{\"order_id\": \"%s\"}", order_id);
-            send_http_response(client_socket, 200, "application/json", response_body);
-            
-            // Free the allocated string
-            free(order_id);
-        }
-    }
-    // Handle legacy endpoints for backward compatibility
-    else if (strcmp(method, "GET") == 0 && strcmp(path, "/read") == 0) {
-        int result = 0;
-        sgx_status_t status = ecall_read_number(global_eid, &result);
-        
-        if (status != SGX_SUCCESS) {
-            char error_msg[100];
-            snprintf(error_msg, sizeof(error_msg), "Error: Failed to call ecall_read_number. Error code: %d", status);
-            send_http_response(client_socket, 500, "text/plain", error_msg);
-        } else {
-            char response_body[100];
-            snprintf(response_body, sizeof(response_body), "{\"value\": %d}", result);
-            send_http_response(client_socket, 200, "application/json", response_body);
-        }
-    }
-    else if (strcmp(method, "POST") == 0 && strcmp(path, "/write") == 0) {
-        // Extract value parameter from query string
-        char value_str[32] = {0};
-        if (get_query_param(query_string, "value", value_str, sizeof(value_str)) < 0) {
-            send_http_response(client_socket, 400, "text/plain", "Missing 'value' parameter");
-            close(client_socket);
-            return;
-        }
-        
-        // Convert value to integer
-        int input_value = atoi(value_str);
-        int result = 0;
-        
-        sgx_status_t status = ecall_write_number(global_eid, &result, input_value);
-        
-        if (status != SGX_SUCCESS) {
-            char error_msg[100];
-            snprintf(error_msg, sizeof(error_msg), "Error: Failed to call ecall_write_number. Error code: %d", status);
-            send_http_response(client_socket, 500, "text/plain", error_msg);
-        } else {
-            char response_body[100];
-            snprintf(response_body, sizeof(response_body), "{\"value\": %d}", result);
             send_http_response(client_socket, 200, "application/json", response_body);
         }
     }
@@ -609,9 +567,7 @@ int SGX_CDECL main(int argc, char *argv[])
     printf("  GET  /trades?user=X    - Get trades for user X\n");
     printf("  POST /order?user=X&type=Y&side=Z&price=P&quantity=Q - Add order\n");
     printf("    where: type = 'limit' or 'market'\n");
-    printf("           side = 'buy' or 'sell'\n");
-    printf("  GET  /read             - Read value from enclave (legacy)\n");
-    printf("  POST /write?value=X    - Write value X to enclave (legacy)\n\n");
+    printf("           side = 'buy' or 'sell'\n\n");
 
     start_http_server();
     
@@ -620,4 +576,5 @@ int SGX_CDECL main(int argc, char *argv[])
     
     return 0;
 }
+
 
