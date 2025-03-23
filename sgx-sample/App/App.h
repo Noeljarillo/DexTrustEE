@@ -66,6 +66,10 @@ void ecall_libc_functions(void);
 void ecall_libcxx_functions(void);
 void ecall_thread_functions(void);
 
+void send_http_response(int client_socket, int status_code, const char* content_type, const char* body);
+int parse_http_request(const char* request, char* method, char* path, char* query_string);
+int get_query_param(const char* query_string, const char* param_name, char* value, size_t value_size);
+
 #if defined(__cplusplus)
 }
 #endif

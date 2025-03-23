@@ -42,6 +42,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <cerrno>  // Add this for errno
 
 #define MAX_PATH FILENAME_MAX
 #define HTTP_PORT 8080
@@ -56,6 +57,7 @@ sgx_enclave_id_t global_eid = 0;
 
 // Flag to control server loop
 volatile sig_atomic_t keep_running = 1;
+
 
 // Signal handler for graceful shutdown
 void handle_signal(int sig) {
